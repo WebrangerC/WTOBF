@@ -8,7 +8,7 @@ import * as Plugin from "./quartz/plugins"
  */
 const config: QuartzConfig = {
   configuration: {
-    pageTitle: "Quartz 4",
+    pageTitle: "WTOBF",
     pageTitleSuffix: "",
     enableSPA: true,
     enablePopovers: true,
@@ -23,8 +23,15 @@ const config: QuartzConfig = {
       fontOrigin: "googleFonts",
       cdnCaching: true,
       typography: {
-        header: "Schibsted Grotesk",
-        body: "Source Sans Pro",
+        header: {
+          name: "Schibsted Grotesk",
+          weights: [400, 700],
+        },
+        body: {
+          name: "Source Sans Pro",
+          weights: [400, 700],
+          includeItalics: true,
+        },
         code: "IBM Plex Mono",
       },
       colors: {
@@ -59,6 +66,7 @@ const config: QuartzConfig = {
       Plugin.CreatedModifiedDate({
         priority: ["frontmatter", "git", "filesystem"],
       }),
+      Plugin.HardLineBreaks(),
       Plugin.SyntaxHighlighting({
         theme: {
           light: "github-light",
