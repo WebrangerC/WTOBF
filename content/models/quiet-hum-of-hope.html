@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Third Attractor</title> <!-- Changed title as requested -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style type="text/css">
+        body, html {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden; /* Prevent scrollbars on the body itself */
+            background-color: #f0f2f5;
+        }
+        #cldContainer {
+            position: relative;
+            width: 100%;
+            height: 100vh; /* Full viewport height */
+            display: flex; /* Use flexbox for layout */
+            flex-direction: column; /* Stack children vertically */
+        }
+        #cldNetwork {
+            flex-grow: 1; /* Allow network to take available space */
+            border: 1px solid #d1d5db;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            min-height: 0; /* Important for flex children to shrink if needed */
+        }
+        .vis-network { /* Ensure vis-network itself fills its container */
+             width: 100%;
+             height: 100%;
+        }
+
+        /* Model Title Display */
+        #modelTitleDisplay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #1F2937;
+            background-color: rgba(255, 255, 255, 0.85);
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+        }
+
+        /* Legend Styles (Always Collapsible Dropdown) */
+        #legend {
+            position: fixed;
+            top: 10px;
+            right: 10px; /* Repositioned to the right side */
+            left: auto;  /* Ensure it's not fighting with a default left */
+            width: calc(25% - 20px); /* 25% of window width, accounting for 10px right offset and 10px implicit left margin */
+            max-width: 350px; /* Add a max-width for very wide screens, ensuring readability */
+            background-color: rgba(255, 255, 255, 0.92);
+            padding: 10px; /* Initial padding */
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+            height: 42px; /* Fixed height for collapsed state (adjust as needed for h3 + padding) */
+            overflow: hidden; /* Hide content when collapsed */
+            z-index: 20; /* Above network and description */
+            transition: height 0.3s ease-in-out; /* Smooth expand/collapse */
+            display: flex; /* Use flexbox to stack header and list */
+            flex-direction: column; /* Stack children vertically */
+            box-sizing: border-box; /* Include padding in height calculation */
+        }
+        #legend.expanded {
+            height: 45vh; /* Expanded height for the entire legend box */
+        }
+        #legend h3 {
+            margin: 0 0 5px 0;
+            font-size: 14px; /* Suitable for a compact header */
+            color: #333;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none; /* Prevent text selection on click */
+            cursor: pointer; /* Indicate it's clickable */
+            flex-shrink: 0; /* Prevent header from shrinking */
+            background-color: inherit; /* Ensure background color when sticky */
+            z-index: 1; /* Ensure it's above scrolling content */
+        }
+        #legend h3::after { /* Arrow indicator */
+            content: '▼'; /* Down arrow for collapsed state */
+            font-size: 12px;
+            margin-left: 10px;
+            transition: transform 0.3s ease-in-out;
+        }
+        #legend.expanded h3::after {
+            content: '▲'; /* Up arrow for expanded state */
+            transform: rotate(180deg); /* More explicit rotation for up arrow if needed */
+        }
+        #legend ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+            flex-grow: 1; /* Allow list to take remaining vertical space */
+            overflow-y: auto; /* Make the list itself scrollable */
+            padding-top: 5px; /* Space between header and first list item */
+            /* Removed scrollbar hiding properties for a natural scrollbar */
+        }
+        #legend li {
+            padding: 9px 12px;
+            font-size: 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.2s ease-in-out, border-left 0.2s ease-in-out;
+            line-height: 1.4;
+            border-left: 3px solid transparent;
+        }
+        #legend li:last-child {
+            border-bottom: none;
+        }
+        #legend li:hover {
+            background-color: #e9f5ff;
+        }
+        #legend li.selected-loop-item {
+            background-color: #d6eaff;
+            border-left: 3px solid #0056b3;
+            font-weight: 500;
+        }
+        #legend li .loop-id {
+            font-weight: bold;
+            color: #0056b3;
+            margin-right: 5px;
+        }
+
+        /* Loop Description Styles (Positioned below legend) */
+        #loopDescription {
+            position: fixed;
+            /* top will be set by JS */
+            right: 10px; /* Align to the right, matching legend */
+            left: auto; /* Ensure it's not fighting with a fixed left */
+            width: calc(25% - 20px); /* Match legend's width calculation */
+            max-width: 350px; /* Match legend's max-width */
+            background-color: rgba(255, 255, 255, 0.97);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            font-size: 13.5px;
+            color: #333;
+            z-index: 15;
+            display: none;
+            line-height: 1.6;
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+            transition: opacity 0.3s ease-in-out, top 0.3s ease-in-out;
+            bottom: auto;
+        }
+        #loopDescription strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #004a99;
+        }
+
+        /* Custom Node Tooltip Styles */
+        #nodeTooltip, #edgeTooltip { /* Combined styles for consistency */
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.95);
+            border: 1px solid #ccc;
+            padding: 8px 12px;
+            border-radius: 6px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-size: 13px;
+            color: #333;
+            max-width: 250px; /* Max width for wrapping */
+            word-wrap: break-word; /* Ensure long words break */
+            display: none; /* Hidden by default */
+            z-index: 100; /* Ensure it's on top */
+            pointer-events: none; /* Do not block interaction with network */
+            line-height: 1.4;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="cldContainer">
+        <div id="modelTitleDisplay"></div>
+        <div id="cldNetwork"></div>
+        <div id="legend">
+            <h3>Feedback Loops</h3>
+            <ul id="loopList"></ul>
+        </div>
+        <div id="loopDescription"></div>
+        <div id="nodeTooltip"></div> <!-- Custom node tooltip -->
+        <div id="edgeTooltip"></div> <!-- Custom edge tooltip -->
+    </div>
+
+    <script type="text/javascript">
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log("CLD script loaded and DOM content parsed.");
+
+            // Helper function to wrap text for node and edge tooltips
+            function wrapText(text, maxLength = 60) {
+                if (!text || text.length <= maxLength) return text;
+                const words = text.split(' ');
+                let currentLine = '', wrappedText = '';
+                for (const word of words) {
+                    if ((currentLine + word).length > maxLength && currentLine.length > 0) {
+                        wrappedText += currentLine.trim() + '\n';
+                        currentLine = '';
+                    }
+                    currentLine += word + ' ';
+                }
+                wrappedText += currentLine.trim();
+                return wrappedText;
+            }
+
+
+            // Helper function to convert color strings (hex, rgb) to rgba with specified alpha
+            function colorToRgba(colorInput, alpha) {
+                let r = 0, g = 0, b = 0;
+                if (typeof colorInput !== 'string') { return `rgba(0,0,0,${alpha})`; }
+                const s = colorInput.toLowerCase().trim();
+                if (s.startsWith('#')) {
+                    if (s.length === 4) { r = parseInt(s[1] + s[1], 16); g = parseInt(s[2] + s[2], 16); b = parseInt(s[3] + s[3], 16); }
+                    else if (s.length === 7) { r = parseInt(s.substring(1, 3), 16); g = parseInt(s.substring(3, 5), 16); b = parseInt(s.substring(5, 7), 16); }
+                    else if (s.length === 9) { r = parseInt(s.substring(1, 3), 16); g = parseInt(s.substring(3, 5), 16); b = parseInt(s.substring(5, 7), 16); } // Added for #RRGGBBAA
+                    else { return `rgba(0,0,0,${alpha})`; }
+                } else if (s.startsWith('rgb')) {
+                    const parts = s.match(/[\d.]+/g);
+                    if (parts && parts.length >= 3) { r = parseInt(parts[0]); g = parseInt(parts[1]); b = parseInt(parts[2]); }
+                    else { return `rgba(0,0,0,${alpha})`;}
+                } else { return `rgba(0,0,0,${alpha})`; }
+                return `rgba(${r},${g},${b},${alpha})`;
+            }
+
+            // --- Node and Edge Styling Definitions ---
+            const nodeBaseColor = { background: '#E0E7FF', border: '#4338CA' }; // Indigo-200 bg, Indigo-700 border
+            const nodeHighlightColor = { background: '#C7D2FE', border: '#4F46E5' }; // Indigo-300 bg, Indigo-600 border
+            const stockColor = { background: '#B2EBF2', border: '#00838F' }; // Light Cyan (Teal-like), Dark Cyan border
+            const stockHighlightColor = { background: '#80DEEA', border: '#00ACC1' }; // Medium Cyan, Slightly darker border
+            const nodeFont = { multi: true, face: 'Inter', color: '#1F2937', bold: { color: '#111827' } }; // Gray-800, Gray-900
+
+            const positiveColor = { color:'#00008B', highlight:'#0000CD', hover: '#4169E1' }; // Dark Blue
+            const negativeColor = { color:'#B22222', highlight:'#DC143C', hover: '#FF6347' }; // Firebrick Red
+            // Default edge font, background is explicitly transparent for labels
+            const edgeFont = { align: 'middle', multi: true, face: 'Inter', size: 15, color: '#374151', background: 'rgba(255,255,255,0)', strokeWidth: 0, strokeColor: 'rgba(255,255,255,0)', mod: 'bold' };
+
+            // --- Node Definitions for Third Attractor CLD ---
+            const nodesArray = [
+                // Stocks (Teal Rectangles)
+                { id: 'societal_path', label: 'Societal Path', type: 'stock', shape: 'box', description: "Represents the current trajectory of society, which is moving towards collapse or dystopia. This is an aggregate measure of various societal indicators like environmental degradation, social unrest, and economic instability. Measurement: Composite index of environmental health, social equity, and economic stability metrics.", color: stockColor, x: -200, y: 0 },
+                { id: 'regenerative_economy', label: 'Regenerative Economy', type: 'stock', shape: 'box', description: "The accumulated structural change in economic systems towards sustainability and equity, moving beyond linear 'take-make-dispose' models. It includes circularity, local production, and equitable distribution. Measurement: Percentage of GDP from circular economy activities, Gini coefficient, renewable energy consumption.", color: stockColor, x: 200, y: 200 },
+                { id: 'shift_in_values', label: 'Shift in Values', type: 'stock', shape: 'box', description: "The accumulated change in individual and collective beliefs, priorities, and ethical frameworks, moving from consumerism and individualism towards community, ecological stewardship, and long-term thinking. Measurement: Surveys on public attitudes towards sustainability, volunteer rates, participation in community initiatives.", color: stockColor, x: 0, y: -250 },
+                { id: 'natural_capital_depletion', label: 'Natural Capital Depletion', type: 'stock', shape: 'box', description: "The accumulated loss of natural resources and ecosystem services, including biodiversity, clean air, water, and fertile soil. This stock represents the degradation of the planet's life-support systems. Measurement: Biodiversity loss index, deforestation rates, freshwater availability, carbon emissions.", color: stockColor, x: -550, y: -100 },
+
+                // Variables (Blue Ovals)
+                { id: 'public_awareness', label: 'Public Awareness\nof Crisis', type: 'variable', description: "The level of understanding and recognition among the general populace regarding the severity and urgency of global crises (e.g., climate change, inequality). Measurement: Public opinion polls, media coverage analysis, search trends for crisis-related terms.", x: -400, y: -250 },
+                { id: 'citizen_engagement', label: 'Citizen Engagement', type: 'variable', description: "The active participation of individuals in civic processes, community building, and advocacy for systemic change. This includes voting, volunteering, protests, and local initiatives. Measurement: Voter turnout, volunteer hours, membership in advocacy groups, participation in local governance.", x: -400, y: 50 },
+                { id: 'policy_innovation', label: 'Policy Innovation', type: 'variable', description: "The development and implementation of new and effective governmental policies and regulations that support sustainable and equitable societal structures. Measurement: Number of new green policies enacted, funding allocated to sustainable initiatives, regulatory changes promoting equity.", x: 200, y: -100 },
+                { id: 'eco_tech_development', label: 'Eco-Tech Development', type: 'variable', description: "The rate of progress and adoption of environmentally friendly and resource-efficient technologies across various sectors. Measurement: R&D investment in green tech, patent applications for sustainable technologies, adoption rates of renewable energy.", x: 500, y: 0 },
+                { id: 'community_resilience', label: 'Community Resilience', type: 'variable', description: "The capacity of local communities to withstand and recover from shocks and stresses, adapt to change, and thrive. This includes social networks, local economies, and infrastructure. Measurement: Community self-sufficiency index, social capital metrics, local food production percentage.", x: 0, y: 350 },
+                { id: 'wealth_disparity', label: 'Wealth Disparity', type: 'variable', description: "The uneven distribution of financial assets and income within a society. High disparity can lead to social instability and hinder collective action. Measurement: Gini coefficient, income share of top 1%, wealth distribution by quintile.", x: -200, y: 300 },
+                { id: 'institutional_trust', label: 'Institutional Trust', type: 'variable', description: "The level of confidence citizens have in governmental bodies, corporations, and other major institutions to act in the public's best interest. Measurement: Public trust surveys, approval ratings of institutions, perceived corruption indices.", x: 200, y: -300 },
+                { id: 'systems_literacy', label: 'Systems Literacy', type: 'variable', description: "The ability of individuals and groups to understand complex interconnected systems, recognize feedback loops, and anticipate unintended consequences. Measurement: Educational program enrollment, assessment scores on systems thinking concepts, public discourse quality.", x: -550, y: -350 },
+                { id: 'social_innovation', label: 'Social Innovation', type: 'variable', description: "The creation and implementation of new strategies, concepts, ideas, and organizations that meet social needs and improve well-being. Measurement: Number of social enterprises, community initiatives, non-profit growth.", x: 400, y: -200 },
+                { id: 'adaptive_governance', label: 'Adaptive Governance', type: 'variable', description: "The capacity of governance systems to learn, adapt, and respond effectively to changing conditions and emerging challenges. It emphasizes flexibility, participation, and continuous improvement. Measurement: Policy review cycles, stakeholder participation rates, responsiveness to crises.", x: 550, y: 100 },
+                { id: 'third_attractor', label: 'Third Attractor', type: 'variable', description: "The desired future state of society characterized by sustainability, equity, and resilience, distinct from both the current trajectory and a dystopian outcome. This is a conceptual goal, not a directly measurable stock. Measurement: Qualitative assessment against defined principles of sustainability and equity.", x: 400, y: 350 }
+            ];
+
+            const nodes = new vis.DataSet(nodesArray);
+            const nodeLabelMap = new Map(nodesArray.map(n => [n.id, n.label.replace(/\n/g, ' ')]));
+
+            // --- Edge Definitions for Third Attractor CLD ---
+            const edgesData = [
+                // Links to Societal Path (Current Trajectory)
+                { from: 'natural_capital_depletion', to: 'societal_path', arrows: 'to', label: '+\nDegradation\n(Decades)', color: negativeColor, description: 'Increased natural capital depletion accelerates the negative societal path. Measurement: Correlation between resource depletion rates and decline in societal well-being indices.', width: 7 },
+                { from: 'wealth_disparity', to: 'societal_path', arrows: 'to', label: '+\nInstability\n(Years)', color: negativeColor, description: 'Greater wealth disparity leads to increased social instability and pushes society towards collapse. Measurement: Correlation between Gini coefficient and social unrest indicators.', width: 6 },
+                { from: 'societal_path', to: 'public_awareness', arrows: 'to', label: '+\nEvidence\n(Years)', color: positiveColor, description: 'Deterioration of the societal path (e.g., more extreme weather, social unrest) increases public awareness of the crisis. Measurement: Public opinion shifts following major crisis events.', width: 5 },
+
+                // Links from Public Awareness
+                { from: 'public_awareness', to: 'citizen_engagement', arrows: 'to', label: '+\nMotivation\n(Months)', color: positiveColor, description: 'Increased public awareness motivates greater citizen engagement in addressing societal issues. Measurement: Correlation between awareness levels and participation in advocacy/activism.', width: 6 },
+                { from: 'public_awareness', to: 'shift_in_values', arrows: 'to', label: '+\nRe-evaluation\n(Years)', color: positiveColor, description: 'Awareness of crisis prompts individuals to re-evaluate their values and priorities. Measurement: Longitudinal surveys on personal values and priorities.', width: 5 },
+                { from: 'public_awareness', to: 'institutional_trust', arrows: 'to', label: '-\nQuestioning\n(Months)', color: negativeColor, description: 'If institutions fail to act on public awareness, trust in them may decrease. Measurement: Decline in trust ratings for government and corporations.', width: 4 },
+                { from: 'public_awareness', to: 'systems_literacy', arrows: 'to', label: '+\nLearning Need\n(Months)', color: positiveColor, description: 'Awareness of complex problems drives a need for better understanding of systems. Measurement: Enrollment in systems thinking courses, demand for educational materials.', width: 4 },
+
+                // Links from Citizen Engagement
+                { from: 'citizen_engagement', to: 'policy_innovation', arrows: 'to', label: '+\nDemand\n(Years)', color: positiveColor, description: 'Active citizen engagement creates demand and pressure for new and effective policies. Measurement: Correlation between citizen advocacy and policy changes.', width: 7 },
+                { from: 'citizen_engagement', to: 'social_innovation', arrows: 'to', label: '+\nCollective Action\n(Months)', color: positiveColor, description: 'Engaged citizens often initiate and participate in social innovations to address local needs. Measurement: Growth in community-led projects and social enterprises.', width: 6 },
+                { from: 'citizen_engagement', to: 'institutional_trust', arrows: 'to', label: '+\nParticipation\n(Years)', color: positiveColor, description: 'When citizens participate and see their efforts yielding results, trust in institutions can increase. Measurement: Changes in trust ratings after successful citizen-led initiatives.', width: 5 },
+
+                // Links from Policy Innovation
+                { from: 'policy_innovation', to: 'regenerative_economy', arrows: 'to', label: '+\nFramework\n(Years)', color: positiveColor, description: 'Innovative policies provide the regulatory and incentive frameworks necessary to transition to a regenerative economy. Measurement: Economic indicators responding to new policies (e.g., green job growth).', width: 8 },
+                { from: 'policy_innovation', to: 'eco_tech_development', arrows: 'to', label: '+\nInvestment\n(Years)', color: positiveColor, description: 'Supportive policies can stimulate investment and accelerate the development of eco-technologies. Measurement: Growth in private and public funding for green R&D.', width: 7 },
+                { from: 'policy_innovation', to: 'natural_capital_depletion', arrows: 'to', label: '-\nRegulation\n(Years)', color: negativeColor, description: 'Effective policies can regulate resource use and protect ecosystems, reducing natural capital depletion. Measurement: Decreased rates of resource extraction or pollution following policy implementation.', width: 8 },
+                { from: 'policy_innovation', to: 'wealth_disparity', arrows: 'to', label: '-\nRedistribution\n(Years)', color: negativeColor, description: 'Policies aimed at equitable distribution of wealth and opportunities can reduce disparity. Measurement: Changes in income and wealth distribution metrics after policy enactment.', width: 6 },
+                { from: 'policy_innovation', to: 'adaptive_governance', arrows: 'to', label: '+\nFeedback Loops\n(Years)', color: positiveColor, description: 'Policies designed with feedback mechanisms and adaptive management principles enhance overall adaptive governance. Measurement: Implementation of policy review cycles and stakeholder engagement in policy adjustments.', width: 5 },
+
+                // Links from Eco-Tech Development
+                { from: 'eco_tech_development', to: 'regenerative_economy', arrows: 'to', label: '+\nTools\n(Years)', color: positiveColor, description: 'Advanced eco-technologies provide the practical tools and infrastructure for a regenerative economy. Measurement: Adoption rates of sustainable technologies in industry and households.', width: 7 },
+                { from: 'eco_tech_development', to: 'natural_capital_depletion', arrows: 'to', label: '-\nEfficiency\n(Years)', color: negativeColor, description: 'Eco-technologies improve resource efficiency and offer alternatives to depleting natural capital. Measurement: Reduction in per-capita resource consumption, increase in recycling rates.', width: 7 },
+
+                // Links from Regenerative Economy
+                { from: 'regenerative_economy', to: 'societal_path', arrows: 'to', label: '-\nRestoration\n(Decades)', color: positiveColor, description: 'A thriving regenerative economy shifts the societal path away from collapse by fostering sustainability and equity. Measurement: Improvement in composite societal well-being indices.', width: 8 },
+                { from: 'regenerative_economy', to: 'community_resilience', arrows: 'to', label: '+\nLocal Wealth\n(Years)', color: positiveColor, description: 'A regenerative economy, often decentralized, strengthens local economies and builds community resilience. Measurement: Growth of local businesses, increase in community-owned assets.', width: 6 },
+                { from: 'regenerative_economy', to: 'wealth_disparity', arrows: 'to', label: '-\nEquity\n(Years)', color: negativeColor, description: 'Principles of a regenerative economy often include equitable distribution of benefits, reducing wealth disparity. Measurement: Decrease in income inequality metrics within regenerative economic sectors.', width: 7 },
+                { from: 'regenerative_economy', to: 'shift_in_values', arrows: 'to', label: '+\nReinforcement\n(Years)', color: positiveColor, description: 'Experiencing the benefits of a regenerative economy reinforces values aligned with sustainability and community. Measurement: Surveys showing increased support for ecological and social values.', width: 5 },
+                { from: 'regenerative_economy', to: 'third_attractor', arrows: 'to', label: '+\nPathway\n(Decades)', color: positiveColor, description: 'The establishment and growth of a regenerative economy is a primary pathway towards achieving the Third Attractor. Measurement: Progress against regenerative economy benchmarks.', width: 9 },
+
+                // Links from Community Resilience
+                { from: 'community_resilience', to: 'citizen_engagement', arrows: 'to', label: '+\nEmpowerment\n(Months)', color: positiveColor, description: 'Stronger community resilience empowers citizens and encourages further engagement. Measurement: Increased participation in local governance and community projects.', width: 5 },
+                { from: 'community_resilience', to: 'societal_path', arrows: 'to', label: '-\nBuffer\n(Years)', color: negativeColor, description: 'Resilient communities act as a buffer against negative societal trends, slowing down or reversing the path towards collapse. Measurement: Reduced impact of external shocks on community well-being.', width: 6 },
+                { from: 'community_resilience', to: 'third_attractor', arrows: 'to', label: '+\nFoundation\n(Decades)', color: positiveColor, description: 'Robust community resilience is a fundamental building block for the Third Attractor, enabling adaptation and thriving. Measurement: Number of resilient communities, their capacity for self-organization.', width: 7 },
+
+                // Links from Shift in Values
+                { from: 'shift_in_values', to: 'citizen_engagement', arrows: 'to', label: '+\nAction\n(Months)', color: positiveColor, description: 'A shift towards pro-social and ecological values directly translates into increased citizen engagement. Measurement: Correlation between value shifts and active participation.', width: 6 },
+                { from: 'shift_in_values', to: 'policy_innovation', arrows: 'to', label: '+\nSupport\n(Years)', color: positiveColor, description: 'Changing societal values create a supportive environment for innovative policies that might otherwise face resistance. Measurement: Public support for progressive policies, legislative success rates.', width: 5 },
+                { from: 'shift_in_values', to: 'eco_tech_development', arrows: 'to', label: '+\nDemand\n(Years)', color: positiveColor, description: 'Values prioritizing sustainability drive demand for eco-friendly technologies and solutions. Measurement: Consumer preferences for sustainable products, investment in green businesses.', width: 5 },
+                { from: 'shift_in_values', to: 'social_innovation', arrows: 'to', label: '+\nNew Models\n(Years)', color: positiveColor, description: 'New values inspire the creation of novel social structures and innovations that align with those values. Measurement: Emergence of new social movements or organizational forms.', width: 6 },
+
+                // Links from Natural Capital Depletion
+                { from: 'natural_capital_depletion', to: 'regenerative_economy', arrows: 'to', label: '-\nConstraint\n(Years)', color: negativeColor, description: 'Continued natural capital depletion constrains the ability to build a regenerative economy due to resource scarcity. Measurement: Reduced availability of raw materials impacting economic sectors.', width: 6 },
+
+                // Links from Wealth Disparity
+                { from: 'wealth_disparity', to: 'citizen_engagement', arrows: 'to', label: '-\nDisenfranchisement\n(Years)', color: negativeColor, description: 'High wealth disparity can lead to disenfranchisement and reduced citizen engagement, as some feel their voice does not matter. Measurement: Declining voter turnout among lower-income groups, reduced civic participation.', width: 5 },
+                { from: 'wealth_disparity', to: 'institutional_trust', arrows: 'to', label: '-\nPerceived Injustice\n(Years)', color: negativeColor, description: 'Perceived injustice due to wealth disparity erodes trust in institutions, which are seen as perpetuating the imbalance. Measurement: Surveys on fairness and equity perceptions of institutions.', width: 6 },
+
+                // Links from Institutional Trust
+                { from: 'institutional_trust', to: 'policy_innovation', arrows: 'to', label: '+\nLegitimacy\n(Years)', color: positiveColor, description: 'Higher institutional trust provides legitimacy for bold policy innovations and makes their implementation easier. Measurement: Public acceptance of new policies, ease of policy implementation.', width: 5 },
+                { from: 'institutional_trust', to: 'citizen_engagement', arrows: 'to', label: '+\nCooperation\n(Months)', color: positiveColor, description: 'Trust in institutions encourages citizens to cooperate with and engage in official processes. Measurement: Participation rates in government-led initiatives.', width: 4 },
+
+                // Links from Systems Literacy
+                { from: 'systems_literacy', to: 'public_awareness', arrows: 'to', label: '+\nDepth\n(Months)', color: positiveColor, description: 'Increased systems literacy deepens public awareness beyond superficial understanding to root causes and interconnections. Measurement: Quality of public discourse on complex issues, ability to identify systemic problems.', width: 5 },
+                { from: 'systems_literacy', to: 'shift_in_values', arrows: 'to', label: '+\nUnderstanding\n(Years)', color: positiveColor, description: 'Understanding systemic interdependencies can lead to a fundamental shift in values towards collective well-being and long-term thinking. Measurement: Changes in values surveys after systems education.', width: 6 },
+                { from: 'systems_literacy', to: 'policy_innovation', arrows: 'to', label: '+\nDesign Quality\n(Years)', color: positiveColor, description: 'Policymakers with higher systems literacy are better equipped to design effective and holistic policies. Measurement: Evaluation of policy effectiveness and unintended consequences.', width: 5 },
+                { from: 'systems_literacy', to: 'social_innovation', arrows: 'to', label: '+\nEffectiveness\n(Years)', color: positiveColor, description: 'Social innovations designed with a systems perspective are more likely to be effective and sustainable. Measurement: Success rates and scalability of social innovations.', width: 5 },
+
+                // Links from Social Innovation
+                { from: 'social_innovation', to: 'community_resilience', arrows: 'to', label: '+\nStrengthening\n(Years)', color: positiveColor, description: 'Successful social innovations often directly strengthen community resilience by addressing local needs and building capacity. Measurement: Improvement in community resilience indicators following social innovation implementation.', width: 6 },
+                { from: 'social_innovation', to: 'shift_in_values', arrows: 'to', label: '+\nModeling\n(Years)', color: positiveColor, description: 'Successful social innovations provide tangible examples and models, reinforcing and propagating new values. Measurement: Spread of values associated with successful social innovations.', width: 5 },
+                { from: 'social_innovation', to: 'regenerative_economy', arrows: 'to', label: '+\nNew Practices\n(Years)', color: positiveColor, description: 'Social innovations can introduce new practices and models that contribute directly to the development of a regenerative economy. Measurement: Adoption of new economic practices stemming from social innovations.', width: 6 },
+
+                // Links from Adaptive Governance
+                { from: 'adaptive_governance', to: 'policy_innovation', arrows: 'to', label: '+\nImprovement\n(Months)', color: positiveColor, description: 'Adaptive governance mechanisms lead to continuous improvement and refinement of policy innovation. Measurement: Speed and effectiveness of policy adjustments in response to feedback.', width: 6 },
+                { from: 'adaptive_governance', to: 'institutional_trust', arrows: 'to', label: '+\nResponsiveness\n(Years)', color: positiveColor, description: 'When governance is adaptive and responsive, it builds greater trust in institutions. Measurement: Public trust ratings correlating with perceived governmental responsiveness.', width: 5 },
+                { from: 'adaptive_governance', to: 'third_attractor', arrows: 'to', label: '+\nNavigation\n(Decades)', color: positiveColor, description: 'Adaptive governance is crucial for navigating the complex transition path towards the Third Attractor, allowing for course correction. Measurement: Capacity for systemic learning and responsiveness in governance.', width: 8 },
+
+                // Links to Third Attractor (Goal Node)
+                { from: 'societal_path', to: 'third_attractor', arrows: 'to', label: '-\nAvoidance\n(Decades)', color: negativeColor, description: 'Moving away from the current societal path is essential for reaching the Third Attractor. Measurement: Decrease in negative societal path indicators.', width: 9 },
+                { from: 'shift_in_values', to: 'third_attractor', arrows: 'to', label: '+\nAlignment\n(Decades)', color: positiveColor, description: 'A fundamental shift in values is critical for societal alignment with the principles of the Third Attractor. Measurement: Widespread adoption of values supportive of sustainability and equity.', width: 8 },
+                { from: 'public_awareness', to: 'third_attractor', arrows: 'to', label: '+\nVisioning\n(Years)', color: positiveColor, description: 'Increased public awareness, especially when coupled with systems literacy, helps society collectively envision and work towards the Third Attractor. Measurement: Public discourse reflecting a shared vision for the future.', width: 6 },
+                { from: 'citizen_engagement', to: 'third_attractor', arrows: 'to', label: '+\nDriving Force\n(Decades)', color: positiveColor, description: 'Sustained citizen engagement is a primary driving force for the societal transformation required to reach the Third Attractor. Measurement: Sustained high levels of civic participation in transformative initiatives.', width: 9 },
+                { from: 'policy_innovation', to: 'third_attractor', arrows: 'to', label: '+\nEnabling\n(Decades)', color: positiveColor, description: 'Progressive policy innovation creates the necessary legal and structural conditions for the emergence of the Third Attractor. Measurement: Implementation of comprehensive policy frameworks for sustainability.', width: 8 },
+                { from: 'eco_tech_development', to: 'third_attractor', arrows: 'to', label: '+\nCapacity\n(Decades)', color: positiveColor, description: 'Advanced eco-technologies provide the practical capacity and solutions needed to build and sustain the Third Attractor. Measurement: Widespread deployment of sustainable technologies.', width: 7 },
+                { from: 'social_innovation', to: 'third_attractor', arrows: 'to', label: '+\nExperimentation\n(Decades)', color: positiveColor, description: 'Social innovations serve as vital experiments and models for the new ways of living and organizing required for the Third Attractor. Measurement: Scalability and replication of successful social innovations.', width: 7 }
+            ].map(edge => ({ ...edge, title: undefined })); // Ensure no default 'title' attribute on edges
+            // Ensure edges have a default 'smooth' property if not explicitly set
+            edgesData.forEach(edge => {
+                if (!edge.smooth) {
+                    edge.smooth = { type: "cubicBezier", roundness: 0.3, enabled: true };
+                }
+                // Set default edge font, allowing individual edges to override if needed
+                edge.font = { ...edgeFont, ...edge.font };
+            });
+
+
+            const edges = new vis.DataSet(edgesData);
+
+            function findAllCyclesRobust(nodesData, edgesData) {
+                const adj = new Map();
+                const edgeMap = new Map();
+                nodesData.forEach(node => adj.set(node.id, []));
+                edgesData.forEach(edge => {
+                    if (!adj.has(edge.from)) adj.set(edge.from, []);
+                    adj.get(edge.from).push({ to: edge.to, id: edge.id, label: edge.label });
+                    edgeMap.set(edge.id, edge);
+                });
+
+                const rawFoundCycles = []; // Store cycles with temp info
+                const currentPathNodes = [];
+                const currentPathEdges = [];
+                const onStack = new Set();
+                const visitedCycles = new Set(); // To store canonical cycle representations
+
+                function getCanonicalCycle(nodeIds, edgeIds) {
+                    const sortedNodes = [...nodeIds].sort().join(',');
+                    const sortedEdges = [...edgeIds].sort().join(',');
+                    return `${sortedNodes}|${sortedEdges}`;
+                }
+
+                function findNewCycles(startNodeId, currentNodeId) {
+                    onStack.add(currentNodeId);
+                    currentPathNodes.push(currentNodeId);
+
+                    const neighbors = adj.get(currentNodeId) || [];
+                    for (const edgeInfo of neighbors) {
+                        currentPathEdges.push(edgeInfo.id);
+                        const neighborNodeId = edgeInfo.to;
+
+                        if (neighborNodeId === startNodeId) {
+                            const cycleNodes = [...currentPathNodes];
+                            const cycleEdgeIds = [...currentPathEdges];
+                            const canonicalForm = getCanonicalCycle(cycleNodes, cycleEdgeIds);
+
+                            if (!visitedCycles.has(canonicalForm)) {
+                                let negativeLinkCount = 0;
+                                cycleEdgeIds.forEach(edgeId => {
+                                    const edge = edgeMap.get(edgeId);
+                                    const polarityChar = edge && edge.label ? edge.label.split('\n')[0].trim() : '';
+                                    if (polarityChar === '-') negativeLinkCount++;
+                                });
+                                const type = (negativeLinkCount % 2 === 0) ? 'R' : 'B';
+
+                                rawFoundCycles.push({
+                                    nodes: cycleNodes,
+                                    edges: cycleEdgeIds,
+                                    type: type,
+                                    edgeCount: cycleEdgeIds.length
+                                });
+                                visitedCycles.add(canonicalForm);
+                            }
+                        } else if (!onStack.has(neighborNodeId)) {
+                            findNewCycles(startNodeId, neighborNodeId);
+                        }
+                        currentPathEdges.pop();
+                    }
+                    currentPathNodes.pop();
+                    onStack.delete(currentNodeId);
+                }
+
+                nodesData.forEach(node => {
+                    currentPathNodes.length = 0;
+                    currentPathEdges.length = 0;
+                    onStack.clear();
+                    findNewCycles(node.id, node.id);
+                });
+
+                // Sort rawFoundCycles by edgeCount (shortest loops first)
+                rawFoundCycles.sort((a, b) => a.edgeCount - b.edgeCount);
+
+                // Define specific loop interpretations for your diagrams
+                const loopInterpretations = new Map([
+                    // Example: [['node1,node2|edge1,edge2'], {name: 'R1: Example Loop', description: 'This is an example reinforcing loop.'}],
+                    // Add specific interpretations for your Third Attractor CLD loops here
+                    // Format: [getCanonicalCycle(['node_id1', 'node_id2'], ['edge_id_a', 'edge_id_b']), {name: 'Loop Name', description: 'Loop Description'}]
+                    // Note: Edge IDs are not directly used in the canonical form for lookup, but node order matters for specific paths if you want to define them.
+                    // For now, I'll rely on the default descriptive name based on nodes.
+                ]);
+
+                let overallCount = 0; // Single counter for the continuous sequence
+
+                // Map to final format with B# or R# prefix IDs, assigned *after* the custom sort
+                return rawFoundCycles.map((cycle) => {
+                    const cycleNodeIdsString = cycle.nodes.sort().join(','); // Standardize for map lookup
+                    const cycleEdgeIdsString = cycle.edges.sort().join(',');
+                    const canonicalForm = `${cycleNodeIdsString}|${cycleEdgeIdsString}`;
+
+                    // Try to find a named interpretation for this cycle
+                    let interpretation = loopInterpretations.get(canonicalForm);
+
+                    overallCount++; // Increment for every loop in the sorted list
+                    const loopId = `${cycle.type}${overallCount}`; // Use type + overallCount for the ID
+
+                    if (!interpretation) {
+                        // If no specific interpretation, use a generic description
+                        const descriptiveNamePart = `Path: ${cycle.nodes.map(n => nodeLabelMap.get(n) || n).join(' → ')}`;
+                        const thematicDesc = `This is an algorithmically detected feedback loop involving ${cycle.edgeCount} links. It is a ${cycle.type === 'R' ? 'reinforcing' : 'balancing'} loop. Examine its constituent variables and links to understand its dynamics and impact on the system.`;
+                        return {
+                            id: loopId,
+                            type: cycle.type,
+                            name: wrapText(`${loopId}: ${descriptiveNamePart}`, 50),
+                            description: thematicDesc,
+                            edgeIds: cycle.edges,
+                            nodeIds: cycle.nodes,
+                            edgeCount: cycle.edgeCount
+                        };
+
+                    } else {
+                        // If interpretation exists, use its name and description
+                        return {
+                            id: loopId, // Still use the sequential ID
+                            type: cycle.type,
+                            name: wrapText(interpretation.name, 50),
+                            description: interpretation.description,
+                            edgeIds: cycle.edges,
+                            nodeIds: cycle.nodes,
+                            edgeCount: cycle.edgeCount
+                        };
+                    }
+                });
+            }
+
+
+            const feedbackLoops = findAllCyclesRobust(nodesArray, edgesData);
+            const container = document.getElementById('cldNetwork');
+            const data = { nodes: nodes, edges: edges };
+            const options = {
+                autoResize: true, height: '100%', width: '100%',
+                nodes: {
+                    shape: 'ellipse', // Default for variables
+                    size: 30,
+                    font: { size: 14, face: 'Inter', color: '#1F2937', multi: true, bold: { color: '#111827', size: 14, face: 'Inter', vadjust: 0, mod: 'bold' } },
+                    widthConstraint: { maximum: 180 },
+                    borderWidth: 2.5,
+                    color: { background: nodeBaseColor.background, border: nodeBaseColor.border, highlight: { background: nodeHighlightColor.background, border: nodeHighlightColor.border }, hover: { background: '#BFDBFE', border: '#60A5FA' }},
+                    shadow: { enabled: true, size:5, x:2, y:2, color: 'rgba(0,0,0,0.1)'}
+                },
+                edges: {
+                    width: 2.5, // This will be overridden by individual edge widths in edgesData
+                    arrows: { to: { enabled: true, scaleFactor: 0.8, type: 'arrow' } },
+                    smooth: { enabled: true, type: "cubicBezier", roundness: 0.3 },
+                    chosen: { edge: function(values, id, selected, hovering) { if (selected || hovering) { values.color = 'magenta'; values.width = values.width * 1.8; } } }, // Fixed: Removed extra '}'
+                    font: { multi: true, background: 'rgba(255,255,255,0)' } // Ensure transparent background for edge labels
+                },
+                physics: {
+                    enabled: true, solver: 'barnesHut',
+                    barnesHut: { gravitationalConstant: -45000, centralGravity: 0.2, springLength: 350, springConstant: 0.05, damping: 0.1, avoidOverlap: 0.8 },
+                    stabilization: { enabled: true, iterations: 2500, updateInterval: 25, onlyDynamicEdges: false, fit: true }
+                },
+                interaction: {
+                    hover: true, dragNodes: true, dragView: true, zoomView: true, tooltipDelay: 0, // Set tooltipDelay to 0 for custom tooltips
+                    navigationButtons: false, keyboard: { enabled: true, bindToWindow: true },
+                    selectable: true, selectConnectedEdges: false, hoverConnectedEdges: false
+                },
+                layout: { hierarchical: false }
+            };
+
+            const originalNodeStyles = {};
+            nodesArray.forEach(node => {
+                // Start with a deep clone of the global options.nodes.color to get the full structure (background, border, highlight, hover)
+                const baseColor = JSON.parse(JSON.stringify(options.nodes.color));
+
+                // Override specific properties with node's defined colors if they exist.
+                // This ensures highlight and hover sub-objects are retained from baseColor if not explicitly overridden by node.color.
+                if (node.color) {
+                    if (node.color.background !== undefined) baseColor.background = node.color.background;
+                    if (node.color.border !== undefined) baseColor.border = node.color.border;
+                    // If node.color has highlight/hover, merge them specifically
+                    if (node.color.highlight) {
+                        if (node.color.highlight.background !== undefined) baseColor.highlight.background = node.color.highlight.background;
+                        if (node.color.highlight.border !== undefined) baseColor.highlight.border = node.color.highlight.border;
+                    }
+                    if (node.color.hover) {
+                        if (node.color.hover.background !== undefined) baseColor.hover.background = node.color.hover.background;
+                        if (node.color.hover.border !== undefined) baseColor.hover.border = node.color.hover.border;
+                    }
+                    // For stock nodes, their 'color' is stockColor, which just has background/border.
+                    // This will correctly override baseColor's background/border, while highlight/hover will remain from baseColor (options.nodes.color).
+                }
+
+                originalNodeStyles[node.id] = {
+                    color: baseColor, // Now `baseColor` has the complete structure
+                    font: JSON.parse(JSON.stringify(node.font || options.nodes.font)),
+                    shape: node.shape,
+                    chosen: node.chosen
+                };
+            });
+
+            const originalEdgeStyles = {};
+            edgesData.forEach(edge => {
+                let smoothOpt = JSON.parse(JSON.stringify(options.edges.smooth));
+                if (edge.smooth) {
+                    smoothOpt = { ...smoothOpt, ...edge.smooth };
+                }
+                originalEdgeStyles[edge.id] = {
+                    width: edge.width !== undefined ? edge.width : options.edges.width, // Store the assigned width
+                    color: JSON.parse(JSON.stringify(edge.color)),
+                    font: JSON.parse(JSON.stringify(edge.font || options.edges.font)),
+                    dashes: edge.dashes !== undefined ? edge.dashes : false,
+                    smooth: smoothOpt
+                };
+            });
+
+            const network = new vis.Network(container, data, options);
+            const networkCanvas = container.querySelector('canvas');
+
+            const loopListUL = document.getElementById('loopList');
+            const legendDiv = document.getElementById('legend');
+            const legendHeader = legendDiv.querySelector('h3');
+            const loopDescriptionDiv = document.getElementById('loopDescription');
+            const modelTitleDisplay = document.getElementById('modelTitleDisplay');
+            const nodeTooltipDiv = document.getElementById('nodeTooltip'); // Get the custom node tooltip div
+            const edgeTooltipDiv = document.getElementById('edgeTooltip'); // Get the custom edge tooltip div
+            let selectedLoopId = null;
+
+            let activeEdgeForRecurve = null;
+            let isRecurvingEdge = false;
+
+            function updateDescriptionPosition() {
+                if (loopDescriptionDiv.style.display !== 'block') return;
+                const legendCurrentHeight = legendDiv.offsetHeight;
+                loopDescriptionDiv.style.top = (legendDiv.offsetTop + legendCurrentHeight + 10) + 'px';
+            }
+
+            function toggleLegend() {
+                legendDiv.classList.toggle('expanded');
+                // The loop description should only show if a loop is selected AND the legend is expanded.
+                // If legend is collapsing, hide the description.
+                if (legendDiv.classList.contains('expanded')) {
+                    if (selectedLoopId) {
+                        const loop = feedbackLoops.find(l => l.id === selectedLoopId);
+                        if (loop) {
+                            loopDescriptionDiv.innerHTML = `<strong>${loop.name.replace(/\n/g, ' ')}</strong><p>${loop.description}</p>`;
+                            loopDescriptionDiv.style.display = 'block';
+                        }
+                    } else {
+                        loopDescriptionDiv.style.display = 'none';
+                    }
+                } else {
+                    loopDescriptionDiv.style.display = 'none';
+                }
+                updateDescriptionPosition();
+            }
+
+            function clearAllHighlightsAndDescriptions() {
+                const nodesToRestore = []; const edgesToRestore = [];
+                nodes.getIds().forEach(nodeId => {
+                    const originalNodeStyle = originalNodeStyles[nodeId];
+                    if (originalNodeStyle) {
+                        nodesToRestore.push({
+                            id: nodeId,
+                            opacity: 1.0,
+                            color: originalNodeStyle.color,
+                            font: originalNodeStyle.font,
+                            borderWidth: options.nodes.borderWidth || 2,
+                            shape: originalNodeStyle.shape,
+                            chosen: originalNodeStyle.chosen
+                        });
+                    }
+                });
+                edges.getIds().forEach(edgeId => {
+                     const originalEdgeStyle = originalEdgeStyles[edgeId];
+                     if (originalEdgeStyle) {
+                         edgesToRestore.push({
+                             id: edgeId,
+                             width: originalEdgeStyle.width, // Use original width
+                             dashes: originalEdgeStyle.dashes,
+                             color: originalEdgeStyle.color,
+                             font: originalEdgeStyle.font,
+                             smooth: JSON.parse(JSON.stringify(originalEdgeStyle.smooth)),
+                             chosen: { edge: function(values, id, selected, hovering) { if (selected || hovering) { values.color = 'magenta'; values.width = originalEdgeStyle.width * 1.2; } } } // Fixed: Removed extra '}'
+                            });
+                        }
+                });
+                if (nodesToRestore.length > 0) nodes.update(nodesToRestore);
+                if (edgesToRestore.length > 0) edges.update(edgesToRestore);
+
+                loopDescriptionDiv.style.display = 'none';
+                loopDescriptionDiv.innerHTML = '';
+            }
+
+            function highlightSelectedLoop(loopToHighlight) {
+                clearAllHighlightsAndDescriptions();
+                const loopNodeIds = new Set(loopToHighlight.nodeIds);
+                const loopEdgeIds = new Set(loopToHighlight.edgeIds);
+                const nodesToUpdate = []; const edgesToUpdate = [];
+
+                nodes.getIds().forEach(nodeId => {
+                    const originalNodeStyle = originalNodeStyles[nodeId]; if (!originalNodeStyle) return;
+                    if (loopNodeIds.has(nodeId)) {
+                        nodesToUpdate.push({
+                            id: nodeId,
+                            opacity: 1.0,
+                            color: originalNodeStyle.color,
+                            font: originalNodeStyle.font,
+                            borderWidth: (options.nodes.borderWidth || 2) * 1.5,
+                            shape: originalNodeStyle.shape,
+                            chosen: originalNodeStyle.chosen
+                        });
+                    } else {
+                        nodesToUpdate.push({
+                            id: nodeId,
+                            opacity: 0.15,
+                            color: {
+                                background: colorToRgba(originalNodeStyle.color.background, 0.15),
+                                border: colorToRgba((originalNodeStyle.color.border) || '', 0.15), // Ensure color values are passed correctly
+                                highlight: {
+                                    background: colorToRgba((originalNodeStyle.color.highlight && originalNodeStyle.color.highlight.background) || '', 0.15),
+                                    border: colorToRgba((originalNodeStyle.color.highlight && originalNodeStyle.color.highlight.border) || '', 0.15)
+                                }
+                            },
+                            font: { ...originalNodeStyle.font, color: colorToRgba(originalNodeStyle.font.color, 0.15) },
+                            borderWidth: options.nodes.borderWidth || 2,
+                            shape: originalNodeStyle.shape,
+                            chosen: originalNodeStyle.chosen
+                        });
+                    }
+                });
+                edges.getIds().forEach(edgeId => {
+                    const originalEdgeStyle = originalEdgeStyles[edgeId]; if (!originalEdgeStyle) return;
+                    if (loopEdgeIds.has(edgeId)) {
+                        const highlightedEdgeFont = JSON.parse(JSON.stringify(originalEdgeStyle.font));
+                        if (highlightedEdgeFont.color) { highlightedEdgeFont.color = colorToRgba(originalEdgeStyle.font.color, 1.0); }
+                        // Set background to transparent when highlighting
+                        highlightedEdgeFont.background = 'rgba(255,255,255,0)';
+                        edgesToUpdate.push({ id: edgeId, width: (originalEdgeStyle.width || options.edges.width) * 2.2, dashes: false, color: { color: '#FF4500', highlight: '#FF6347', hover: '#FF7F50' }, font: highlightedEdgeFont, smooth: JSON.parse(JSON.stringify(originalEdgeStyle.smooth)), chosen: { edge: function(values, id, selected, hovering) { values.color = '#FF0000'; values.width = originalEdgeStyle.width * 1.2; } } }); // Fixed: Removed extra '}'
+                    } else {
+                        const dimmedEdgeColorObject = {};
+                        if (originalEdgeStyle.color && typeof originalEdgeStyle.color === 'object') {
+                            dimmedEdgeColorObject.color = colorToRgba(originalEdgeStyle.color.color, 0.1); dimmedEdgeColorObject.highlight = colorToRgba(originalEdgeStyle.color.highlight, 0.1); dimmedEdgeColorObject.hover = colorToRgba(originalEdgeStyle.color.hover, 0.1);
+                        } else {
+                             dimmedEdgeColorObject.color = colorToRgba(originalEdgeStyle.color || 'gray', 0.1); dimmedEdgeColorObject.highlight = colorToRgba(originalEdgeStyle.color || 'gray', 0.1); dimmedEdgeColorObject.hover = colorToRgba(originalEdgeStyle.color || 'gray', 0.1);
+                        }
+                        const dimmedFontObject = JSON.parse(JSON.stringify(originalEdgeStyle.font || {}));
+                        if (dimmedFontObject.color) { dimmedFontObject.color = colorToRgba(dimmedFontObject.color, 0.1); }
+                        if (dimmedFontObject.background) { dimmedFontObject.background = colorToRgba(dimmedFontObject.background, 0.0); } // Ensure transparent background when dimmed
+                        edgesToUpdate.push({ id: edgeId, color: dimmedEdgeColorObject, width: (originalEdgeStyle.width || options.edges.width) * 0.8, dashes: originalEdgeStyle.dashes, font: dimmedFontObject, smooth: JSON.parse(JSON.stringify(originalEdgeStyle.smooth)) });
+                    }
+                });
+
+                if (nodesToUpdate.length > 0) nodes.update(nodesToUpdate);
+                if (edgesToUpdate.length > 0) edges.update(edgesToUpdate);
+
+                loopDescriptionDiv.innerHTML = `<strong>${loopToHighlight.name.replace(/\n/g, ' ')}</strong><p>${loopToHighlight.description}</p>`;
+                loopDescriptionDiv.style.display = 'block';
+                updateDescriptionPosition();
+            }
+
+            if (feedbackLoops.length === 0) {
+                loopListUL.innerHTML = "<li>No feedback loops were automatically identified.</li>";
+            } else {
+                feedbackLoops.forEach(loop => {
+                    const listItem = document.createElement('li');
+                    listItem.classList.add('legend-item');
+                    listItem.innerHTML = `<span class="loop-id">${loop.id}:</span> ${loop.name.substring(loop.name.indexOf(':') + 1).trim().replace(/\n/g, ' ')}`;
+                    listItem.dataset.loopId = loop.id;
+                    listItem.addEventListener('click', () => {
+                        const clickedLoopId = loop.id;
+                        const currentlySelectedLegendItem = legendDiv.querySelector('.legend-item.selected-loop-item');
+                        if (currentlySelectedLegendItem) { currentlySelectedLegendItem.classList.remove('selected-loop-item'); }
+                        if (selectedLoopId === clickedLoopId) {
+                            selectedLoopId = null;
+                            clearAllHighlightsAndDescriptions();
+                        } else {
+                            selectedLoopId = clickedLoopId;
+                            highlightSelectedLoop(loop);
+                            listItem.classList.add('selected-loop-item');
+                            if (!legendDiv.classList.contains('expanded')) {
+                                legendDiv.classList.add('expanded');
+                                updateDescriptionPosition();
+                            }
+                        }
+                        if (activeEdgeForRecurve) {
+                            activeEdgeForRecurve = null;
+                        }
+                    });
+                    loopListUL.appendChild(listItem);
+                });
+            }
+
+            if(legendHeader) {
+                legendHeader.addEventListener('click', toggleLegend);
+            }
+
+            // --- Node Tooltip Logic ---
+            network.on("hoverNode", function(params) {
+                const nodeId = params.node;
+                if (nodeId) {
+                    const node = nodes.get(nodeId);
+                    if (node && node.description) {
+                        const nodePosition = network.getPositions([nodeId]);
+                        const domPosition = network.canvas.canvasToDOM({x: nodePosition[nodeId].x, y: nodePosition[nodeId].y});
+
+                        nodeTooltipDiv.innerHTML = wrapText(node.description);
+                        nodeTooltipDiv.style.left = (domPosition.x + 15) + 'px'; // Offset from node
+                        nodeTooltipDiv.style.top = (domPosition.y + 15) + 'px';  // Offset from node
+                        nodeTooltipDiv.style.display = 'block';
+
+                        // Adjust position if it goes off screen (simple check for right and bottom)
+                        const rect = nodeTooltipDiv.getBoundingClientRect();
+                        const viewportWidth = window.innerWidth;
+                        const viewportHeight = window.innerHeight;
+
+                        if (rect.right > viewportWidth - 10) {
+                            nodeTooltipDiv.style.left = (domPosition.x - rect.width - 15) + 'px';
+                        }
+                        if (rect.bottom > viewportHeight - 10) {
+                            nodeTooltipDiv.style.top = (domPosition.y - rect.height - 15) + 'px';
+                        }
+                    }
+                }
+            });
+
+            network.on("blurNode", function() {
+                nodeTooltipDiv.style.display = 'none';
+            });
+
+            // --- Edge Tooltip Logic ---
+            network.on("hoverEdge", function(params) {
+                const edgeId = params.edge;
+                if (edgeId) {
+                    const edge = edges.get(edgeId);
+                    if (edge && edge.description) {
+                        // Position tooltip relative to the mouse pointer
+                        const domX = params.pointer.DOM.x;
+                        const domY = params.pointer.DOM.y;
+
+                        edgeTooltipDiv.innerHTML = wrapText(edge.description);
+                        edgeTooltipDiv.style.left = (domX + 15) + 'px';
+                        edgeTooltipDiv.style.top = (domY + 15) + 'px';
+                        edgeTooltipDiv.style.display = 'block';
+
+                        // Adjust position if it goes off screen
+                        const rect = edgeTooltipDiv.getBoundingClientRect();
+                        const viewportWidth = window.innerWidth;
+                        const viewportHeight = window.innerHeight;
+
+                        if (rect.right > viewportWidth - 10) {
+                            edgeTooltipDiv.style.left = (domX - rect.width - 15) + 'px';
+                        }
+                        if (rect.bottom > viewportHeight - 10) {
+                            edgeTooltipDiv.style.top = (domY - rect.height - 15) + 'px';
+                        }
+                    }
+                }
+            });
+
+            network.on("blurEdge", function() {
+                edgeTooltipDiv.style.display = 'none';
+            });
+
+            // Hide all tooltips on drag end
+            network.on("dragEnd", function() {
+                nodeTooltipDiv.style.display = 'none';
+                edgeTooltipDiv.style.display = 'none';
+            });
+
+
+            // --- Edge Recurving Logic ---
+            function getEdgeSmoothOptions(edgeId) {
+                const edge = edges.get(edgeId);
+                if (edge && edge.smooth) {
+                    return JSON.parse(JSON.stringify(edge.smooth));
+                }
+                if (originalEdgeStyles[edgeId] && originalEdgeStyles[edgeId].smooth) {
+                    return JSON.parse(JSON.stringify(originalEdgeStyles[edgeId].smooth));
+                }
+                return { type: 'cubicBezier', roundness: 0.3, enabled: true };
+            }
+
+            function updateOriginalEdgeSmoothOptions(edgeId, newSmoothOptions) {
+                if (!originalEdgeStyles[edgeId]) {
+                    originalEdgeStyles[edgeId] = {};
+                }
+                originalEdgeStyles[edgeId].smooth = JSON.parse(JSON.stringify(newSmoothOptions));
+            }
+
+            network.on("click", function(params) {
+                if (isRecurvingEdge) {
+                    return;
+                }
+
+                if (params.edges.length > 0 && params.nodes.length === 0) {
+                    const clickedEdgeId = params.edges[0];
+                    if (activeEdgeForRecurve === clickedEdgeId) {
+                        activeEdgeForRecurve = null;
+                    } else {
+                        activeEdgeForRecurve = clickedEdgeId;
+                    }
+                    if (selectedLoopId) {
+                        const currentlySelectedLegendItem = legendDiv.querySelector('.legend-item.selected-loop-item');
+                        if (currentlySelectedLegendItem) { currentlySelectedLegendItem.classList.remove('selected-loop-item'); }
+                        clearAllHighlightsAndDescriptions();
+                        selectedLoopId = null;
+                    }
+                } else {
+                     if (activeEdgeForRecurve) {
+                        activeEdgeForRecurve = null;
+                    }
+                }
+            });
+
+            if (networkCanvas) {
+                networkCanvas.addEventListener('mousedown', function(event) {
+                    if (activeEdgeForRecurve && !isRecurvingEdge) {
+                        isRecurvingEdge = true;
+                        document.addEventListener('mousemove', handleMouseMoveOnDocumentForRecurve);
+                        document.addEventListener('mouseup', handleMouseUpOnDocumentForRecurve);
+                        network.setOptions({ interaction: { dragNodes: false, dragView: false } });
+                        event.preventDefault();
+                    }
+                });
+            } else {
+                console.error("Network canvas element not found. Edge recurving will not work.");
+            }
+
+            function handleMouseMoveOnDocumentForRecurve(event) {
+                if (!isRecurvingEdge || !activeEdgeForRecurve) return;
+
+                const currentMousePos = network.canvas.DOMtoCanvas({x: event.clientX, y: event.clientY});
+                const edge = edges.get(activeEdgeForRecurve);
+                if (!edge) {
+                    isRecurvingEdge = false;
+                    document.removeEventListener('mousemove', handleMouseMoveOnDocumentForRecurve);
+                    document.removeEventListener('mouseup', handleMouseUpOnDocumentForRecurve);
+                    network.setOptions({ interaction: { dragNodes: true, dragView: true } });
+                    activeEdgeForRecurve = null;
+                    return;
+                }
+
+                const fromNodePos = network.getPositions([edge.from])[edge.from];
+                const toNodePos = network.getPositions([edge.to])[edge.to];
+                if (!fromNodePos || !toNodePos) {
+                    return;
+                }
+
+                const midPointX = (fromNodePos.x + toNodePos.x) / 2;
+                const midPointY = (fromNodePos.y + toNodePos.y) / 2;
+                const dx = currentMousePos.x - midPointX;
+                const dy = currentMousePos.y - midPointY;
+                const edgeDx = toNodePos.x - fromNodePos.x;
+                const edgeDy = toNodePos.y - fromNodePos.y;
+                const orientation = (edgeDx * dy) - (edgeDy * dx);
+                const newCurveType = orientation > 0 ? 'curvedCCW' : 'curvedCW';
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                const edgeLength = Math.sqrt(edgeDx*edgeDx + edgeDy*edgeDy);
+                let newRoundness = (dist / edgeLength) * 1.0;
+                newRoundness = Math.max(0.01, Math.min(0.95, newRoundness));
+
+                edges.update({
+                    id: activeEdgeForRecurve,
+                    smooth: { type: newCurveType, roundness: newRoundness, enabled: true }
+                });
+            }
+
+            function handleMouseUpOnDocumentForRecurve(event) {
+                if (isRecurvingEdge) {
+                    if (activeEdgeForRecurve) {
+                        const finalEdgeState = edges.get(activeEdgeForRecurve);
+                        if (finalEdgeState && finalEdgeState.smooth) {
+                            updateOriginalEdgeSmoothOptions(activeEdgeForRecurve, finalEdgeState.smooth);
+                        }
+                        activeEdgeForRecurve = null;
+                    }
+                }
+                isRecurvingEdge = false;
+                document.removeEventListener('mousemove', handleMouseMoveOnDocumentForRecurve);
+                document.removeEventListener('mouseup', handleMouseUpOnDocumentForRecurve);
+                network.setOptions({ interaction: { dragNodes: true, dragView: true } });
+            }
+
+            // Disable physics after stabilization for a stationary diagram
+            network.on("stabilizationIterationsDone", function () { network.setOptions( { physics: { enabled: false } } ); });
+
+            // Node drag start/end for fixed positions
+            network.on("dragStart", function(params) {
+                if (params.nodes.length > 0 && !isRecurvingEdge) {
+                    const nodeId = params.nodes[0];
+                    nodes.update([{id: nodeId, fixed: {x:false, y:false}}]); // Temporarily unfix to drag
+                }
+            });
+            network.on("dragEnd", function(params) {
+                if (params.nodes.length > 0 && !isRecurvingEdge) {
+                    const nodeId = params.nodes[0];
+                    const pos = network.getPosition(nodeId);
+                    nodes.update([{id: nodeId, x: pos.x, y: pos.y, fixed: {x:true, y:true}}]); // Fix at new position
+                }
+            });
+
+            window.addEventListener('resize', () => {
+                if (loopDescriptionDiv.style.display === 'block') {
+                    updateDescriptionPosition();
+                }
+                network.fit();
+            });
+
+            loopDescriptionDiv.style.display = 'none';
+
+            // Set the model title display
+            if (modelTitleDisplay) {
+                modelTitleDisplay.textContent = document.title;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Journey</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style type="text/css">
+        body, html {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden; /* Prevent scrollbars on the body itself */
+            background-color: #f0f2f5;
+        }
+        #cldContainer {
+            position: relative;
+            width: 100%;
+            height: 100vh; /* Full viewport height */
+            display: flex; /* Use flexbox for layout */
+            flex-direction: column; /* Stack children vertically */
+        }
+        #cldNetwork {
+            flex-grow: 1; /* Allow network to take available space */
+            border: 1px solid #d1d5db;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            min-height: 0; /* Important for flex children to shrink if needed */
+        }
+        .vis-network { /* Ensure vis-network itself fills its container */
+             width: 100%;
+             height: 100%;
+        }
+
+        /* Model Title Display */
+        #modelTitleDisplay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #1F2937;
+            background-color: rgba(255, 255, 255, 0.85);
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+        }
+
+        /* Legend Styles (Always Collapsible Dropdown) */
+        #legend {
+            position: fixed;
+            top: 10px;
+            right: 10px; /* Repositioned to the right side */
+            left: auto;  /* Ensure it's not fighting with a default left */
+            width: calc(25% - 20px); /* 25% of window width, accounting for 10px right offset and 10px implicit left margin */
+            max-width: 350px; /* Add a max-width for very wide screens, ensuring readability */
+            background-color: rgba(255, 255, 255, 0.92);
+            padding: 10px; /* Initial padding */
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+            height: 42px; /* Fixed height for collapsed state (adjust as needed for h3 + padding) */
+            overflow: hidden; /* Hide content when collapsed */
+            z-index: 20; /* Above network and description */
+            transition: height 0.3s ease-in-out; /* Smooth expand/collapse */
+            display: flex; /* Use flexbox to stack header and list */
+            flex-direction: column; /* Stack children vertically */
+            box-sizing: border-box; /* Include padding in height calculation */
+        }
+        #legend.expanded {
+            height: 45vh; /* Expanded height for the entire legend box */
+        }
+        #legend h3 {
+            margin: 0 0 5px 0;
+            font-size: 14px; /* Suitable for a compact header */
+            color: #333;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none; /* Prevent text selection on click */
+            cursor: pointer; /* Indicate it's clickable */
+            flex-shrink: 0; /* Prevent header from shrinking */
+            background-color: inherit; /* Ensure background color when sticky */
+            z-index: 1; /* Ensure it's above scrolling content */
+        }
+        #legend h3::after { /* Arrow indicator */
+            content: '▼'; /* Down arrow for collapsed state */
+            font-size: 12px;
+            margin-left: 10px;
+            transition: transform 0.3s ease-in-out;
+        }
+        #legend.expanded h3::after {
+            content: '▲'; /* Up arrow for expanded state */
+            transform: rotate(180deg); /* More explicit rotation for up arrow if needed */
+        }
+        #legend ul {
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+            flex-grow: 1; /* Allow list to take remaining vertical space */
+            overflow-y: auto; /* Make the list itself scrollable */
+            padding-top: 5px; /* Space between header and first list item */
+            /* Removed scrollbar hiding properties for a natural scrollbar */
+        }
+        #legend li {
+            padding: 9px 12px;
+            font-size: 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.2s ease-in-out, border-left 0.2s ease-in-out;
+            line-height: 1.4;
+            border-left: 3px solid transparent;
+        }
+        #legend li:last-child {
+            border-bottom: none;
+        }
+        #legend li:hover {
+            background-color: #e9f5ff;
+        }
+        #legend li.selected-loop-item {
+            background-color: #d6eaff;
+            border-left: 3px solid #0056b3;
+            font-weight: 500;
+        }
+        #legend li .loop-id {
+            font-weight: bold;
+            color: #0056b3;
+            margin-right: 5px;
+        }
+
+        /* Loop Description Styles (Positioned below legend) */
+        #loopDescription {
+            position: fixed;
+            /* top will be set by JS */
+            right: 10px; /* Align to the right, matching legend */
+            left: auto; /* Ensure it's not fighting with a fixed left */
+            width: calc(25% - 20px); /* Match legend's width calculation */
+            max-width: 350px; /* Match legend's max-width */
+            background-color: rgba(255, 255, 255, 0.97);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            font-size: 13.5px;
+            color: #333;
+            z-index: 15;
+            display: none;
+            line-height: 1.6;
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+            transition: opacity 0.3s ease-in-out, top 0.3s ease-in-out;
+            bottom: auto;
+        }
+        #loopDescription strong {
+            display: block;
+            margin-bottom: 8px;
+            color: #004a99;
+        }
+
+        /* Custom Node Tooltip Styles */
+        #nodeTooltip, #edgeTooltip { /* Combined styles for consistency */
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.95);
+            border: 1px solid #ccc;
+            padding: 8px 12px;
+            border-radius: 6px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            font-size: 13px;
+            color: #333;
+            max-width: 250px; /* Max width for wrapping */
+            word-wrap: break-word; /* Ensure long words break */
+            display: none; /* Hidden by default */
+            z-index: 100; /* Ensure it's on top */
+            pointer-events: none; /* Do not block interaction with network */
+            line-height: 1.4;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="cldContainer">
+        <div id="modelTitleDisplay"></div>
+        <div id="cldNetwork"></div>
+        <div id="legend">
+            <h3>Feedback Loops</h3>
+            <ul id="loopList"></ul>
+        </div>
+        <div id="loopDescription"></div>
+        <div id="nodeTooltip"></div> <!-- Custom node tooltip -->
+        <div id="edgeTooltip"></div> <!-- Custom edge tooltip -->
+    </div>
+
+    <script type="text/javascript">
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log("CLD script loaded and DOM content parsed.");
+
+            // Helper function to wrap text for node and edge tooltips
+            function wrapText(text, maxLength = 60) {
+                if (!text || text.length <= maxLength) return text;
+                const words = text.split(' ');
+                let currentLine = '', wrappedText = '';
+                for (const word of words) {
+                    if ((currentLine + word).length > maxLength && currentLine.length > 0) {
+                        wrappedText += currentLine.trim() + '\n';
+                        currentLine = '';
+                    }
+                    currentLine += word + ' ';
+                }
+                wrappedText += currentLine.trim();
+                return wrappedText;
+            }
+
+
+            // Helper function to convert color strings (hex, rgb) to rgba with specified alpha
+            function colorToRgba(colorInput, alpha) {
+                let r = 0, g = 0, b = 0;
+                if (typeof colorInput !== 'string') { return `rgba(0,0,0,${alpha})`; }
+                const s = colorInput.toLowerCase().trim();
+                if (s.startsWith('#')) {
+                    if (s.length === 4) { r = parseInt(s[1] + s[1], 16); g = parseInt(s[2] + s[2], 16); b = parseInt(s[3] + s[3], 16); }
+                    else if (s.length === 7) { r = parseInt(s.substring(1, 3), 16); g = parseInt(s.substring(3, 5), 16); b = parseInt(s.substring(5, 7), 16); }
+                    else if (s.length === 9) { r = parseInt(s.substring(1, 3), 16); g = parseInt(s.substring(3, 5), 16); b = parseInt(s.substring(5, 7), 16); } // Added for #RRGGBBAA
+                    else { return `rgba(0,0,0,${alpha})`; }
+                } else if (s.startsWith('rgb')) {
+                    const parts = s.match(/[\d.]+/g);
+                    if (parts && parts.length >= 3) { r = parseInt(parts[0]); g = parseInt(parts[1]); b = parseInt(parts[2]); }
+                    else { return `rgba(0,0,0,${alpha})`;}
+                } else { return `rgba(0,0,0,${alpha})`; }
+                return `rgba(${r},${g},${b},${alpha})`;
+            }
+
+            // --- Node and Edge Styling Definitions ---
+            const nodeBaseColor = { background: '#E0E7FF', border: '#4338CA' }; // Indigo-200 bg, Indigo-700 border
+            const nodeHighlightColor = { background: '#C7D2FE', border: '#4F46E5' }; // Indigo-300 bg, Indigo-600 border
+            const stockColor = { background: '#B2EBF2', border: '#00838F' }; // Light Cyan (Teal-like), Dark Cyan border
+            const stockHighlightColor = { background: '#80DEEA', border: '#00ACC1' }; // Medium Cyan, Slightly darker border
+            const nodeFont = { multi: true, face: 'Inter', color: '#1F2937', bold: { color: '#111827' } }; // Gray-800, Gray-900
+
+            const positiveColor = { color:'#00008B', highlight:'#0000CD', hover: '#4169E1' }; // Dark Blue
+            const negativeColor = { color:'#B22222', highlight:'#DC143C', hover: '#FF6347' }; // Firebrick Red
+            // Default edge font, background is explicitly transparent for labels
+            const edgeFont = { align: 'middle', multi: true, face: 'Inter', size: 15, color: '#374151', background: 'rgba(255,255,255,0)', strokeWidth: 0, strokeColor: 'rgba(255,255,255,0)', mod: 'bold' };
+
+            // --- Node Definitions ---
+            const nodesArray = [
+                // Stocks (Teal Rectangles)
+                { id: 'societal_wellbeing', label: 'Societal\nWellbeing', type: 'stock', shape: 'box', description: "The overall state of health, happiness, and prosperity within a society. It encompasses various aspects like economic stability, social equity, environmental quality, and individual flourishing.", measurement: "Measured by indices like the Human Development Index (HDI), Gross National Happiness (GNH), or subjective well-being surveys.", color: stockColor },
+                { id: 'collective_wisdom', label: 'Collective\nWisdom', type: 'stock', shape: 'box', description: "The accumulated knowledge, understanding, and insight of a community or society, derived from shared experiences, learning, and cultural heritage.", measurement: "Measured by literacy rates, educational attainment, scientific output, and public engagement in informed discourse.", color: stockColor },
+                { id: 'resource_sustainability', label: 'Resource\nSustainability', type: 'stock', shape: 'box', description: "The capacity to maintain natural resources and ecological systems over time, ensuring their availability for future generations.", measurement: "Measured by ecological footprint, renewable energy adoption rates, deforestation rates, and biodiversity indices.", color: stockColor },
+                { id: 'social_equity', label: 'Social\nEquity', type: 'stock', shape: 'box', description: "The fairness and justice in the distribution of resources, opportunities, and power within a society, ensuring all individuals have equal access and rights.", measurement: "Measured by Gini coefficient, income disparity, access to healthcare and education, and representation in decision-making.", color: stockColor },
+                { id: 'technological_advancement', label: 'Technological\nAdvancement', type: 'stock', shape: 'box', description: "The progress and innovation in tools, techniques, and systems that enhance human capabilities and solve societal challenges.", measurement: "Measured by R&D investment, patent filings, adoption rates of new technologies, and scientific breakthroughs.", color: stockColor },
+                { id: 'trust_cooperation', label: 'Trust &\nCooperation', type: 'stock', shape: 'box', description: "The level of confidence and willingness among individuals and groups to work together for common goals, fostering social cohesion.", measurement: "Measured by social capital indices, survey data on trust in institutions, and participation in community initiatives.", color: stockColor },
+                { id: 'utopia', label: 'Utopia', type: 'stock', shape: 'box', description: "The ideal state of society, characterized by perfect social, political, and environmental conditions, serving as the ultimate goal of the journey.", measurement: "Measured by the complete fulfillment of all other societal wellbeing indicators, reaching their theoretical maximums.", color: stockColor },
+
+                // Variables (Blue Ovals)
+                { id: 'education_access', label: 'Education\nAccess', type: 'variable', description: "The availability and ease with which individuals can obtain quality education at all levels.", measurement: "Measured by enrollment rates, student-teacher ratios, and geographical distribution of educational institutions." },
+                { id: 'innovation_rate', label: 'Innovation\nRate', type: 'variable', description: "The speed and frequency at which new ideas, products, and processes are developed and adopted.", measurement: "Measured by number of new startups, research publications, and product launch frequency." },
+                { id: 'environmental_stewardship', label: 'Environmental\nStewardship', type: 'variable', description: "The responsible use and protection of the natural environment through conservation and sustainable practices.", measurement: "Measured by waste reduction, recycling rates, protected land area, and carbon emissions." },
+                { id: 'economic_opportunity', label: 'Economic\nOpportunity', type: 'variable', description: "The availability of pathways for individuals to achieve financial stability and upward mobility.", measurement: "Measured by employment rates, wage growth, and access to capital and entrepreneurship programs." },
+                { id: 'civic_engagement', label: 'Civic\nEngagement', type: 'variable', description: "The active participation of citizens in the public life of their communities and societies.", measurement: "Measured by voter turnout, volunteer rates, and participation in public forums and protests." },
+                { id: 'governance_quality', label: 'Governance\nQuality', type: 'variable', description: "The effectiveness and accountability of public institutions in serving the needs of the population.", measurement: "Measured by corruption perception index, rule of law, government effectiveness, and regulatory quality." },
+                { id: 'health_outcomes', label: 'Health\nOutcomes', type: 'variable', description: "The overall health status of a population, including life expectancy, disease prevalence, and access to healthcare.", measurement: "Measured by life expectancy, infant mortality rates, prevalence of chronic diseases, and access to healthcare services." },
+                { id: 'cultural_diversity', label: 'Cultural\nDiversity', type: 'variable', description: "The variety of human societies or cultures in a specific region or in the world as a whole.", measurement: "Measured by linguistic diversity, ethnic group representation, and cultural event participation." },
+                { id: 'conflict_resolution', label: 'Conflict\nResolution', type: 'variable', description: "The processes and mechanisms used to resolve disputes and disagreements peacefully and constructively.", measurement: "Measured by incidence of violent conflict, mediation success rates, and public satisfaction with justice systems." },
+                { id: 'resource_depletion', label: 'Resource\nDepletion', type: 'variable', description: "The consumption of a resource faster than it can be replenished.", measurement: "Measured by rates of consumption vs. regeneration for natural resources like water, forests, and minerals." },
+                { id: 'social_unrest', label: 'Social\nUnrest', type: 'variable', description: "Disruptions to public order caused by protests, riots, or other forms of collective discontent.", measurement: "Measured by incidence of protests, strikes, and civil disturbances." },
+                { id: 'environmental_degradation', label: 'Environmental\nDegradation', type: 'variable', description: "The deterioration of the environment through depletion of resources such as air, water and soil.", measurement: "Measured by pollution levels, habitat loss, and climate change indicators." },
+                { id: 'inequality', label: 'Inequality', type: 'variable', description: "The uneven distribution of resources, opportunities, and privileges within a society.", measurement: "Measured by income inequality (Gini coefficient), wealth distribution, and disparities in access to services." },
+                { id: 'public_discourse', label: 'Public\nDiscourse', type: 'variable', description: "The exchange of ideas and opinions in public, often through media, social platforms, and community discussions.", measurement: "Measured by media diversity, civic participation in debates, and prevalence of critical thinking." },
+                { id: 'global_cooperation', label: 'Global\nCooperation', type: 'variable', description: "The collaborative efforts among nations and international organizations to address shared challenges.", measurement: "Measured by participation in international treaties, foreign aid contributions, and joint research initiatives." },
+                { id: 'human_potential', label: 'Human\nPotential', type: 'variable', description: "The latent capabilities and talents of individuals that can be developed and utilized for personal and societal benefit.", measurement: "Measured by educational attainment, skill development, and participation in creative and innovative activities." },
+                { id: 'quality_of_life', label: 'Quality of\nLife', type: 'variable', description: "The general well-being of individuals and societies, encompassing physical health, psychological state, and social relationships.", measurement: "Measured by subjective well-being surveys, life satisfaction, and access to amenities and leisure." },
+                { id: 'sustainable_practices', label: 'Sustainable\nPractices', type: 'variable', description: "Actions and behaviors that meet the needs of the present without compromising the ability of future generations to meet their own needs.", measurement: "Measured by adoption of eco-friendly technologies, responsible consumption patterns, and resource efficiency." },
+                { id: 'social_innovation', label: 'Social\nInnovation', type: 'variable', description: "New solutions to social problems that are more effective, efficient, and sustainable than existing approaches.", measurement: "Measured by the number of social enterprises, community-led initiatives, and successful policy reforms addressing social issues." },
+                { id: 'ethical_governance', label: 'Ethical\nGovernance', type: 'variable', description: "The application of moral principles and values in the exercise of political and institutional authority.", measurement: "Measured by transparency indices, public trust in government, and adherence to human rights standards." },
+                { id: 'equitable_distribution', label: 'Equitable\nDistribution', type: 'variable', description: "The fair allocation of resources, opportunities, and benefits across all segments of society.", measurement: "Measured by wealth and income equality metrics, access to essential services, and reduction in poverty rates." },
+                { id: 'informed_decision_making', label: 'Informed\nDecision-Making', type: 'variable', description: "The process of making choices based on accurate, relevant, and comprehensive information and understanding.", measurement: "Measured by public literacy rates, access to reliable information, and critical thinking skills within the population." },
+                { id: 'environmental_restoration', label: 'Environmental\nRestoration', type: 'variable', description: "The process of assisting the recovery of an ecosystem that has been degraded, damaged, or destroyed.", measurement: "Measured by acres of restored habitats, water quality improvements, and reforestation efforts." },
+                { id: 'citizen_participation', label: 'Citizen\nParticipation', type: 'variable', description: "The involvement of the general public in the decision-making processes of government and public institutions.", measurement: "Measured by voter turnout, attendance at public meetings, and engagement in policy discussions." },
+                { id: 'social_cohesion', label: 'Social\nCohesion', type: 'variable', description: "The bonds or 'glue' that bind people together and create a sense of belonging and shared purpose.", measurement: "Measured by community involvement, intergroup trust, and perceived social support." }
+            ];
+
+            const nodes = new vis.DataSet(nodesArray);
+            const nodeLabelMap = new Map(nodesArray.map(n => [n.id, n.label.replace(/\n/g, ' ')]));
+
+            // --- Edge Definitions ---
+            const edgesData = [
+                // Education & Wisdom Loop
+                { id: 'education_access_collective_wisdom', from: 'education_access', to: 'collective_wisdom', arrows: 'to', label: '+\nIncreases\n(5-10 yrs)', color: positiveColor, description: 'Greater access to quality education directly increases the collective knowledge and understanding of society. Estimated interaction time: 5-10 years.', width: 6 },
+                { id: 'collective_wisdom_education_access', from: 'collective_wisdom', to: 'education_access', arrows: 'to', label: '+\nPrioritizes\n(2-5 yrs)', color: positiveColor, description: 'A more collectively wise society understands the importance of education and prioritizes its access and quality. Estimated interaction time: 2-5 years.', width: 7 },
+
+                // Innovation & Advancement Loop
+                { id: 'innovation_rate_technological_advancement', from: 'innovation_rate', to: 'technological_advancement', arrows: 'to', label: '+\nFuels\n(1-3 yrs)', color: positiveColor, description: 'A higher innovation rate directly fuels the pace of technological advancement. Estimated interaction time: 1-3 years.', width: 8 },
+                { id: 'technological_advancement_innovation_rate', from: 'technological_advancement', to: 'innovation_rate', arrows: 'to', label: '+\nEnables\n(1-2 yrs)', color: positiveColor, description: 'Advanced technology provides new tools and platforms, enabling further innovation. Estimated interaction time: 1-2 years.', width: 7 },
+
+                // Environmental Stewardship & Sustainability Loop
+                { id: 'environmental_stewardship_resource_sustainability', from: 'environmental_stewardship', to: 'resource_sustainability', arrows: 'to', label: '+\nImproves\n(10-50 yrs)', color: positiveColor, description: 'Increased environmental stewardship practices directly improve the long-term sustainability of resources. Estimated interaction time: 10-50 years.', width: 6 },
+                { id: 'resource_sustainability_environmental_stewardship', from: 'resource_sustainability', to: 'environmental_stewardship', arrows: 'to', label: '+\nEncourages\n(5-15 yrs)', color: positiveColor, description: 'Awareness of resource sustainability encourages greater environmental stewardship. Estimated interaction time: 5-15 years.', width: 5 },
+
+                // Social Equity & Wellbeing Loop
+                { id: 'social_equity_societal_wellbeing', from: 'social_equity', to: 'societal_wellbeing', arrows: 'to', label: '+\nEnhances\n(5-20 yrs)', color: positiveColor, description: 'Greater social equity leads to better distribution of resources and opportunities, enhancing overall societal wellbeing. Estimated interaction time: 5-20 years.', width: 8 },
+                { id: 'societal_wellbeing_social_equity', from: 'societal_wellbeing', to: 'social_equity', arrows: 'to', label: '+\nDemands\n(5-10 yrs)', color: positiveColor, description: 'A society with higher wellbeing is more likely to demand and implement policies that promote social equity. Estimated interaction time: 5-10 years.', width: 7 },
+
+                // Trust & Cooperation Loop
+                { id: 'trust_cooperation_civic_engagement', from: 'trust_cooperation', to: 'civic_engagement', arrows: 'to', label: '+\nFosters\n(2-5 yrs)', color: positiveColor, description: 'Higher levels of trust and cooperation foster greater civic engagement. Estimated interaction time: 2-5 years.', width: 6 },
+                { id: 'civic_engagement_trust_cooperation', from: 'civic_engagement', to: 'trust_cooperation', arrows: 'to', label: '+\nBuilds\n(3-7 yrs)', color: positiveColor, description: 'Active civic engagement builds trust and encourages cooperation among citizens. Estimated interaction time: 3-7 years.', width: 6 },
+
+                // Interconnections
+                { id: 'collective_wisdom_innovation_rate', from: 'collective_wisdom', to: 'innovation_rate', arrows: 'to', label: '+\nInforms\n(2-5 yrs)', color: positiveColor, description: 'Collective wisdom informs and guides the direction and quality of innovation. Estimated interaction time: 2-5 years.', width: 6 },
+                { id: 'technological_advancement_environmental_stewardship', from: 'technological_advancement', to: 'environmental_stewardship', arrows: 'to', label: '+\nProvides Tools\n(3-10 yrs)', color: positiveColor, description: 'Technological advancement provides new tools and methods for effective environmental stewardship. Estimated interaction time: 3-10 years.', width: 5 },
+                { id: 'resource_sustainability_economic_opportunity', from: 'resource_sustainability', to: 'economic_opportunity', arrows: 'to', label: '+\nEnables\n(10-30 yrs)', color: positiveColor, description: 'Long-term resource sustainability enables stable and diverse economic opportunities. Estimated interaction time: 10-30 years.', width: 6 },
+                { id: 'economic_opportunity_social_equity', from: 'economic_opportunity', to: 'social_equity', arrows: 'to', label: '+\nReduces Gap\n(5-15 yrs)', color: positiveColor, description: 'Increased economic opportunity, especially for marginalized groups, reduces social inequality and promotes equity. Estimated interaction time: 5-15 years.', width: 7 },
+                { id: 'social_equity_trust_cooperation', from: 'social_equity', to: 'trust_cooperation', arrows: 'to', label: '+\nStrengthens\n(5-10 yrs)', color: positiveColor, description: 'Greater social equity strengthens trust and cooperation by reducing grievances and fostering fairness. Estimated interaction time: 5-10 years.', width: 7 },
+                { id: 'trust_cooperation_governance_quality', from: 'trust_cooperation', to: 'governance_quality', arrows: 'to', label: '+\nSupports\n(3-8 yrs)', color: positiveColor, description: 'High levels of trust and cooperation support and enable better governance quality. Estimated interaction time: 3-8 years.', width: 6 },
+                { id: 'governance_quality_societal_wellbeing', from: 'governance_quality', to: 'societal_wellbeing', arrows: 'to', label: '+\nImproves\n(5-15 yrs)', color: positiveColor, description: 'Good governance quality directly improves the overall societal wellbeing through effective public services and fair policies. Estimated interaction time: 5-15 years.', width: 8 },
+                { id: 'societal_wellbeing_human_potential', from: 'societal_wellbeing', to: 'human_potential', arrows: 'to', label: '+\nUnlocks\n(5-15 yrs)', color: positiveColor, description: 'A higher societal wellbeing unlocks and supports the full development of human potential. Estimated interaction time: 5-15 years.', width: 7 },
+                { id: 'human_potential_collective_wisdom', from: 'human_potential', to: 'collective_wisdom', arrows: 'to', label: '+\nContributes\n(5-10 yrs)', color: positiveColor, description: 'Realized human potential contributes significantly to the growth of collective wisdom. Estimated interaction time: 5-10 years.', width: 6 },
+
+                // Negative Feedback and Challenges
+                { id: 'resource_depletion_resource_sustainability', from: 'resource_depletion', to: 'resource_sustainability', arrows: 'to', label: '-\nReduces\n(1-5 yrs)', color: negativeColor, description: 'Increased resource depletion directly reduces resource sustainability. Estimated interaction time: 1-5 years.', width: 8 },
+                { id: 'environmental_degradation_resource_sustainability', from: 'environmental_degradation', to: 'resource_sustainability', arrows: 'to', label: '-\nHarms\n(5-20 yrs)', color: negativeColor, description: 'Environmental degradation harms the capacity for resource sustainability. Estimated interaction time: 5-20 years.', width: 7 },
+                { id: 'inequality_social_equity', from: 'inequality', to: 'social_equity', arrows: 'to', label: '-\nDecreases\n(5-15 yrs)', color: negativeColor, description: 'Increased inequality directly decreases social equity. Estimated interaction time: 5-15 years.', width: 8 },
+                { id: 'social_unrest_trust_cooperation', from: 'social_unrest', to: 'trust_cooperation', arrows: 'to', label: '-\nErodes\n(1-5 yrs)', color: negativeColor, description: 'Social unrest erodes trust and cooperation within society. Estimated interaction time: 1-5 years.', width: 7 },
+                { id: 'governance_quality_social_unrest', from: 'governance_quality', to: 'social_unrest', arrows: 'to', label: '-\nMitigates\n(3-7 yrs)', color: negativeColor, description: 'High governance quality mitigates the likelihood and intensity of social unrest. Estimated interaction time: 3-7 years.', width: 6 },
+                { id: 'societal_wellbeing_social_unrest', from: 'societal_wellbeing', to: 'social_unrest', arrows: 'to', label: '-\nReduces\n(5-10 yrs)', color: negativeColor, description: 'Increased societal wellbeing reduces the drivers of social unrest. Estimated interaction time: 5-10 years.', width: 7 },
+
+                // Additional Positive Links
+                { id: 'collective_wisdom_informed_decision_making', from: 'collective_wisdom', to: 'informed_decision_making', arrows: 'to', label: '+\nEnables\n(1-3 yrs)', color: positiveColor, description: 'Higher collective wisdom enables more informed decision-making across society. Estimated interaction time: 1-3 years.', width: 6 },
+                { id: 'informed_decision_making_governance_quality', from: 'informed_decision_making', to: 'governance_quality', arrows: 'to', label: '+\nImproves\n(2-5 yrs)', color: positiveColor, description: 'Informed decision-making processes improve the quality and effectiveness of governance. Estimated interaction time: 2-5 years.', width: 7 },
+                { id: 'governance_quality_equitable_distribution', from: 'governance_quality', to: 'equitable_distribution', arrows: 'to', label: '+\nEnsures\n(3-8 yrs)', color: positiveColor, description: 'Good governance quality ensures more equitable distribution of resources and opportunities. Estimated interaction time: 3-8 years.', width: 7 },
+                { id: 'equitable_distribution_social_equity', from: 'equitable_distribution', to: 'social_equity', arrows: 'to', label: '+\nAchieves\n(1-3 yrs)', color: positiveColor, description: 'Equitable distribution of resources directly contributes to achieving social equity. Estimated interaction time: 1-3 years.', width: 8 },
+                { id: 'technological_advancement_sustainable_practices', from: 'technological_advancement', to: 'sustainable_practices', arrows: 'to', label: '+\nEnables\n(2-7 yrs)', color: positiveColor, description: 'Technological advancement enables the development and adoption of more sustainable practices. Estimated interaction time: 2-7 years.', width: 6 },
+                { id: 'sustainable_practices_environmental_stewardship', from: 'sustainable_practices', to: 'environmental_stewardship', arrows: 'to', label: '+\nReinforces\n(1-3 yrs)', color: positiveColor, description: 'Widespread adoption of sustainable practices reinforces environmental stewardship. Estimated interaction time: 1-3 years.', width: 7 },
+                { id: 'environmental_stewardship_environmental_restoration', from: 'environmental_stewardship', to: 'environmental_restoration', arrows: 'to', label: '+\nLeads to\n(5-20 yrs)', color: positiveColor, description: 'Strong environmental stewardship leads to active efforts in environmental restoration. Estimated interaction time: 5-20 years.', width: 6 },
+                { id: 'environmental_restoration_resource_sustainability', from: 'environmental_restoration', to: 'resource_sustainability', arrows: 'to', label: '+\nEnhances\n(10-50 yrs)', color: positiveColor, description: 'Successful environmental restoration enhances long-term resource sustainability. Estimated interaction time: 10-50 years.', width: 7 },
+                { id: 'civic_engagement_citizen_participation', from: 'civic_engagement', to: 'citizen_participation', arrows: 'to', label: '+\nManifests as\n(0-1 yr)', color: positiveColor, description: 'Civic engagement manifests as increased citizen participation in public life. Estimated interaction time: 0-1 year.', width: 8 },
+                { id: 'citizen_participation_governance_quality', from: 'citizen_participation', to: 'governance_quality', arrows: 'to', label: '+\nImproves\n(3-7 yrs)', color: positiveColor, description: 'Increased citizen participation improves the accountability and responsiveness of governance. Estimated interaction time: 3-7 years.', width: 7 },
+                { id: 'social_equity_social_cohesion', from: 'social_equity', to: 'social_cohesion', arrows: 'to', label: '+\nFosters\n(5-10 yrs)', color: positiveColor, description: 'Greater social equity fosters stronger social cohesion. Estimated interaction time: 5-10 years.', width: 7 },
+                { id: 'social_cohesion_trust_cooperation', from: 'social_cohesion', to: 'trust_cooperation', arrows: 'to', label: '+\nStrengthens\n(2-5 yrs)', color: positiveColor, description: 'Strong social cohesion strengthens trust and cooperation within communities. Estimated interaction time: 2-5 years.', width: 6 },
+                { id: 'global_cooperation_resource_sustainability', from: 'global_cooperation', to: 'resource_sustainability', arrows: 'to', label: '+\nSupports\n(5-20 yrs)', color: positiveColor, description: 'Global cooperation supports efforts towards resource sustainability on a planetary scale. Estimated interaction time: 5-20 years.', width: 6 },
+                { id: 'global_cooperation_conflict_resolution', from: 'global_cooperation', to: 'conflict_resolution', arrows: 'to', label: '+\nFacilitates\n(1-5 yrs)', color: positiveColor, description: 'Global cooperation facilitates more effective conflict resolution. Estimated interaction time: 1-5 years.', width: 7 },
+                { id: 'conflict_resolution_social_unrest', from: 'conflict_resolution', to: 'social_unrest', arrows: 'to', label: '-\nReduces\n(1-3 yrs)', color: negativeColor, description: 'Effective conflict resolution reduces instances and intensity of social unrest. Estimated interaction time: 1-3 years.', width: 8 },
+                { id: 'collective_wisdom_health_outcomes', from: 'collective_wisdom', to: 'health_outcomes', arrows: 'to', label: '+\nImproves\n(5-15 yrs)', color: positiveColor, description: 'Greater collective wisdom leads to better health policies and practices, improving health outcomes. Estimated interaction time: 5-15 years.', width: 6 },
+                { id: 'health_outcomes_societal_wellbeing', from: 'health_outcomes', to: 'societal_wellbeing', arrows: 'to', label: '+\nContributes to\n(1-3 yrs)', color: positiveColor, description: 'Improved health outcomes directly contribute to overall societal wellbeing. Estimated interaction time: 1-3 years.', width: 8 },
+                { id: 'cultural_diversity_collective_wisdom', from: 'cultural_diversity', to: 'collective_wisdom', arrows: 'to', label: '+\nEnriches\n(5-10 yrs)', color: positiveColor, description: 'Cultural diversity enriches collective wisdom by bringing diverse perspectives and knowledge. Estimated interaction time: 5-10 years.', width: 6 },
+                { id: 'cultural_diversity_social_cohesion', from: 'cultural_diversity', to: 'social_cohesion', arrows: 'to', label: '+\nChallenges then Strengthens\n(10-30 yrs)', color: positiveColor, description: 'While initially challenging, embracing cultural diversity ultimately strengthens social cohesion through mutual understanding and respect. Estimated interaction time: 10-30 years.', width: 5 },
+                { id: 'public_discourse_informed_decision_making', from: 'public_discourse', to: 'informed_decision_making', arrows: 'to', label: '+\nPromotes\n(1-3 yrs)', color: positiveColor, description: 'Robust public discourse promotes more informed decision-making. Estimated interaction time: 1-3 years.', width: 7 },
+                { id: 'informed_decision_making_social_innovation', from: 'informed_decision_making', to: 'social_innovation', arrows: 'to', label: '+\nSparks\n(2-5 yrs)', color: positiveColor, description: 'Informed decision-making sparks new social innovations. Estimated interaction time: 2-5 years.', width: 6 },
+                { id: 'social_innovation_societal_wellbeing', from: 'social_innovation', to: 'societal_wellbeing', arrows: 'to', label: '+\nAddresses Needs\n(3-8 yrs)', color: positiveColor, description: 'Social innovations directly address societal needs, improving wellbeing. Estimated interaction time: 3-8 years.', width: 7 },
+                { id: 'ethical_governance_governance_quality', from: 'ethical_governance', to: 'governance_quality', arrows: 'to', label: '+\nEnsures\n(1-3 yrs)', color: positiveColor, description: 'Ethical governance ensures high quality and trustworthy public administration. Estimated interaction time: 1-3 years.', width: 8 },
+                { id: 'ethical_governance_trust_cooperation', from: 'ethical_governance', to: 'trust_cooperation', arrows: 'to', label: '+\nBuilds\n(3-7 yrs)', color: positiveColor, description: 'Ethical governance builds public trust and fosters cooperation. Estimated interaction time: 3-7 years.', width: 7 },
+                { id: 'inequality_societal_wellbeing', from: 'inequality', to: 'societal_wellbeing', arrows: 'to', label: '-\nDiminishes\n(5-20 yrs)', color: negativeColor, description: 'High inequality diminishes overall societal wellbeing. Estimated interaction time: 5-20 years.', width: 9 },
+                { id: 'resource_depletion_economic_opportunity', from: 'resource_depletion', to: 'economic_opportunity', arrows: 'to', label: '-\nConstrains\n(5-15 yrs)', color: negativeColor, description: 'Resource depletion constrains long-term economic opportunity. Estimated interaction time: 5-15 years.', width: 8 },
+                { id: 'environmental_degradation_health_outcomes', from: 'environmental_degradation', to: 'health_outcomes', arrows: 'to', label: '-\nHarms\n(5-20 yrs)', color: negativeColor, description: 'Environmental degradation harms public health outcomes. Estimated interaction time: 5-20 years.', width: 8 },
+                { id: 'public_discourse_trust_cooperation', from: 'public_discourse', to: 'trust_cooperation', arrows: 'to', label: '+\nFacilitates\n(2-5 yrs)', color: positiveColor, description: 'Open and constructive public discourse facilitates trust and cooperation. Estimated interaction time: 2-5 years.', width: 6 },
+                { id: 'quality_of_life_societal_wellbeing', from: 'quality_of_life', to: 'societal_wellbeing', arrows: 'to', label: '+\nIs Component Of\n(0-1 yr)', color: positiveColor, description: 'Quality of life is a direct and major component of societal wellbeing. Estimated interaction time: 0-1 year.', width: 9 },
+                { id: 'societal_wellbeing_quality_of_life', from: 'societal_wellbeing', to: 'quality_of_life', arrows: 'to', label: '+\nReflects in\n(0-1 yr)', color: positiveColor, description: 'Societal wellbeing is reflected in the quality of life experienced by individuals. Estimated interaction time: 0-1 year.', width: 9 },
+                { id: 'human_potential_innovation_rate', from: 'human_potential', to: 'innovation_rate', arrows: 'to', label: '+\nDrives\n(2-5 yrs)', color: positiveColor, description: 'Realizing human potential drives a higher innovation rate. Estimated interaction time: 2-5 years.', width: 7 },
+                { id: 'innovation_rate_economic_opportunity', from: 'innovation_rate', to: 'economic_opportunity', arrows: 'to', label: '+\nCreates\n(3-7 yrs)', color: positiveColor, description: 'A high innovation rate creates new economic opportunities. Estimated interaction time: 3-7 years.', width: 6 },
+                { id: 'economic_opportunity_quality_of_life', from: 'economic_opportunity', to: 'quality_of_life', arrows: 'to', label: '+\nImproves\n(2-5 yrs)', color: positiveColor, description: 'Increased economic opportunity generally improves the quality of life. Estimated interaction time: 2-5 years.', width: 6 },
+                { id: 'resource_sustainability_quality_of_life', from: 'resource_sustainability', to: 'quality_of_life', arrows: 'to', label: '+\nSupports\n(5-20 yrs)', color: positiveColor, description: 'Long-term resource sustainability supports a higher quality of life. Estimated interaction time: 5-20 years.', width: 7 },
+                { id: 'social_equity_quality_of_life', from: 'social_equity', to: 'quality_of_life', arrows: 'to', label: '+\nEnhances\n(5-15 yrs)', color: positiveColor, description: 'Greater social equity enhances the quality of life for all members of society. Estimated interaction time: 5-15 years.', width: 8 },
+                { id: 'trust_cooperation_quality_of_life', from: 'trust_cooperation', to: 'quality_of_life', arrows: 'to', label: '+\nEnriches\n(2-5 yrs)', color: positiveColor, description: 'High levels of trust and cooperation enrich the quality of life through stronger social bonds. Estimated interaction time: 2-5 years.', width: 6 },
+                { id: 'governance_quality_quality_of_life', from: 'governance_quality', to: 'quality_of_life', arrows: 'to', label: '+\nImproves\n(3-8 yrs)', color: positiveColor, description: 'Good governance quality leads to better public services and stability, improving quality of life. Estimated interaction time: 3-8 years.', width: 7 },
+                { id: 'education_access_human_potential', from: 'education_access', to: 'human_potential', arrows: 'to', label: '+\nDevelops\n(5-15 yrs)', color: positiveColor, description: 'Access to quality education develops individual human potential. Estimated interaction time: 5-15 years.', width: 7 },
+                { id: 'health_outcomes_human_potential', from: 'health_outcomes', to: 'human_potential', arrows: 'to', label: '+\nEnables\n(1-3 yrs)', color: positiveColor, description: 'Improved health outcomes enable individuals to realize their full human potential. Estimated interaction time: 1-3 years.', width: 8 },
+                { id: 'economic_opportunity_human_potential', from: 'economic_opportunity', to: 'human_potential', arrows: 'to', label: '+\nFrees up\n(3-7 yrs)', color: positiveColor, description: 'Economic opportunity frees individuals to pursue their potential beyond basic needs. Estimated interaction time: 3-7 years.', width: 6 },
+                { id: 'social_equity_human_potential', from: 'social_equity', to: 'human_potential', arrows: 'to', label: '+\nUnlocks for All\n(5-15 yrs)', color: positiveColor, description: 'Social equity unlocks human potential for all segments of society, not just a privileged few. Estimated interaction time: 5-15 years.', width: 8 },
+                { id: 'technological_advancement_quality_of_life', from: 'technological_advancement', to: 'quality_of_life', arrows: 'to', label: '+\nEnhances\n(2-7 yrs)', color: positiveColor, description: 'Technological advancement enhances quality of life through convenience, health, and communication. Estimated interaction time: 2-7 years.', width: 6 },
+                { id: 'environmental_stewardship_quality_of_life', from: 'environmental_stewardship', to: 'quality_of_life', arrows: 'to', label: '+\nPreserves\n(5-20 yrs)', color: positiveColor, description: 'Environmental stewardship preserves the natural conditions necessary for a high quality of life. Estimated interaction time: 5-20 years.', width: 7 },
+                { id: 'collective_wisdom_public_discourse', from: 'collective_wisdom', to: 'public_discourse', arrows: 'to', label: '+\nEnriches\n(2-5 yrs)', color: positiveColor, description: 'Collective wisdom enriches the quality and depth of public discourse. Estimated interaction time: 2-5 years.', width: 6 },
+                { id: 'public_discourse_collective_wisdom', from: 'public_discourse', to: 'collective_wisdom', arrows: 'to', label: '+\nContributes to\n(2-5 yrs)', color: positiveColor, description: 'Open public discourse contributes to the growth of collective wisdom. Estimated interaction time: 2-5 years.', width: 6 },
+                { id: 'social_cohesion_conflict_resolution', from: 'social_cohesion', to: 'conflict_resolution', arrows: 'to', label: '+\nFacilitates\n(2-5 yrs)', color: positiveColor, description: 'Strong social cohesion facilitates more effective conflict resolution. Estimated interaction time: 2-5 years.', width: 6 },
+                { id: 'conflict_resolution_social_cohesion', from: 'conflict_resolution', to: 'social_cohesion', arrows: 'to', label: '+\nStrengthens\n(1-3 yrs)', color: positiveColor, description: 'Successful conflict resolution strengthens social cohesion. Estimated interaction time: 1-3 years.', width: 7 },
+                { id: 'global_cooperation_technological_advancement', from: 'global_cooperation', to: 'technological_advancement', arrows: 'to', label: '+\nAccelerates\n(3-10 yrs)', color: positiveColor, description: 'Global cooperation accelerates technological advancement through shared research and resources. Estimated interaction time: 3-10 years.', width: 5 },
+                { id: 'global_cooperation_social_equity', from: 'global_cooperation', to: 'social_equity', arrows: 'to', label: '+\nPromotes\n(5-15 yrs)', color: positiveColor, description: 'Global cooperation promotes social equity by addressing global disparities and shared challenges. Estimated interaction time: 5-15 years.', width: 6 },
+                { id: 'global_cooperation_governance_quality', from: 'global_cooperation', to: 'governance_quality', arrows: 'to', label: '+\nInfluences\n(3-8 yrs)', color: positiveColor, description: 'Global cooperation influences and encourages improved governance quality through shared standards and accountability. Estimated interaction time: 3-8 years.', width: 5 },
+                { id: 'social_innovation_social_equity', from: 'social_innovation', to: 'social_equity', arrows: 'to', label: '+\nAdvances\n(3-8 yrs)', color: positiveColor, description: 'Social innovations often advance social equity by creating more inclusive solutions. Estimated interaction time: 3-8 years.', width: 7 },
+                { id: 'ethical_governance_equitable_distribution', from: 'ethical_governance', to: 'equitable_distribution', arrows: 'to', label: '+\nEnsures\n(2-5 yrs)', color: positiveColor, description: 'Ethical governance ensures fair and equitable distribution of resources. Estimated interaction time: 2-5 years.', width: 8 },
+
+                // Utopia connection
+                { id: 'societal_wellbeing_utopia', from: 'societal_wellbeing', to: 'utopia', arrows: 'to', label: '+\nApproaches\n(50-100 yrs)', color: positiveColor, description: 'As societal wellbeing increases, society progressively approaches the ideal state of utopia. Estimated interaction time: 50-100 years.', width: 9 },
+                { id: 'utopia_societal_wellbeing', from: 'utopia', to: 'societal_wellbeing', arrows: 'to', label: '+\nMotivates\n(20-50 yrs)', color: positiveColor, description: 'The vision and partial realization of utopia motivates further efforts to enhance societal wellbeing. Estimated interaction time: 20-50 years.', width: 8 }
+            ].map(edge => ({ ...edge, title: undefined })); // Ensure no default 'title' attribute on edges
+            // Ensure edges have a default 'smooth' property if not explicitly set
+            edgesData.forEach(edge => {
+                if (!edge.smooth) {
+                    edge.smooth = { type: "cubicBezier", roundness: 0.3, enabled: true };
+                }
+                // Set default edge font, allowing individual edges to override if needed
+                edge.font = { ...edgeFont, ...edge.font };
+            });
+
+
+            const edges = new vis.DataSet(edgesData);
+
+            function findAllCyclesRobust(nodesData, edgesData) {
+                const adj = new Map();
+                const edgeMap = new Map();
+                nodesData.forEach(node => adj.set(node.id, []));
+                edgesData.forEach(edge => {
+                    if (!adj.has(edge.from)) adj.set(edge.from, []);
+                    adj.get(edge.from).push({ to: edge.to, id: edge.id, label: edge.label });
+                    edgeMap.set(edge.id, edge);
+                });
+
+                const rawFoundCycles = []; // Store cycles with temp info
+                const currentPathNodes = [];
+                const currentPathEdges = [];
+                const onStack = new Set();
+                const visitedEdgesInCycle = new Set(); // Track visited edges to avoid duplicate cycle detection when order is reversed or starting point is different for the same cycle
+
+                function findNewCycles(startNodeId, currentNodeId) {
+                    onStack.add(currentNodeId);
+                    currentPathNodes.push(currentNodeId);
+
+                    const neighbors = adj.get(currentNodeId) || [];
+                    for (const edgeInfo of neighbors) {
+                        currentPathEdges.push(edgeInfo.id);
+                        const neighborNodeId = edgeInfo.to;
+
+                        if (neighborNodeId === startNodeId) {
+                            const cycleNodes = [...currentPathNodes];
+                            const cycleEdgeIds = [...currentPathEdges];
+                            const sortedEdgeIdsString = [...cycleEdgeIds].sort().join(',');
+
+                            // Check for duplicates based on sortedEdgeIdsString
+                            if (!visitedEdgesInCycle.has(sortedEdgeIdsString)) {
+                                let negativeLinkCount = 0;
+                                cycleEdgeIds.forEach(edgeId => {
+                                    const edge = edgeMap.get(edgeId);
+                                    const polarityChar = edge && edge.label ? edge.label.split('\n')[0].trim() : '';
+                                    if (polarityChar === '-') negativeLinkCount++;
+                                });
+                                const type = (negativeLinkCount % 2 === 0) ? 'R' : 'B';
+
+                                rawFoundCycles.push({
+                                    nodes: cycleNodes,
+                                    edges: cycleEdgeIds,
+                                    sortedEdgeIdsString: sortedEdgeIdsString,
+                                    type: type, // Store type here (B or R)
+                                    edgeCount: cycleEdgeIds.length // Store edge count here
+                                });
+                                visitedEdgesInCycle.add(sortedEdgeIdsString); // Mark as visited
+                            }
+                        } else if (!onStack.has(neighborNodeId)) {
+                            findNewCycles(startNodeId, neighborNodeId);
+                        }
+                        currentPathEdges.pop();
+                    }
+                    currentPathNodes.pop();
+                    onStack.delete(currentNodeId);
+                }
+
+                nodesData.forEach(node => {
+                    currentPathNodes.length = 0;
+                    currentPathEdges.length = 0;
+                    onStack.clear();
+                    findNewCycles(node.id, node.id);
+                });
+
+                // Sort rawFoundCycles by edgeCount (shortest loops first)
+                rawFoundCycles.sort((a, b) => a.edgeCount - b.edgeCount);
+
+                // Define specific loop interpretations for your diagrams
+                const loopInterpretations = new Map([
+                    // Education & Wisdom Loop
+                    [['collective_wisdom_education_access', 'education_access_collective_wisdom'].sort().join(','), {name: 'Education & Wisdom Growth', description: 'Increased education access leads to more collective wisdom, which in turn prioritizes and improves education access, creating a virtuous cycle of learning and knowledge accumulation.'}],
+                    // Innovation & Advancement Loop
+                    [['innovation_rate_technological_advancement', 'technological_advancement_innovation_rate'].sort().join(','), {name: 'Innovation Engine', description: 'A higher innovation rate fuels technological advancement, which in turn enables further innovation, creating a reinforcing loop of progress.'}],
+                    // Environmental Stewardship & Sustainability Loop
+                    [['environmental_stewardship_resource_sustainability', 'resource_sustainability_environmental_stewardship'].sort().join(','), {name: 'Sustainable Practices', description: 'Improved environmental stewardship leads to greater resource sustainability, which encourages further stewardship, forming a reinforcing loop for environmental health.'}],
+                    // Social Equity & Wellbeing Loop
+                    [['social_equity_societal_wellbeing', 'societal_wellbeing_social_equity'].sort().join(','), {name: 'Equitable Wellbeing', description: 'Greater social equity leads to better distribution of resources and opportunities, enhancing overall societal wellbeing, and a higher societal wellbeing demands and implements policies for more social equity.'}],
+                    // Trust & Cooperation Loop
+                    [['trust_cooperation_civic_engagement', 'civic_engagement_trust_cooperation'].sort().join(','), {name: 'Community Cohesion', description: 'Higher trust and cooperation foster greater civic engagement, which in turn builds more trust and cooperation, strengthening community bonds.'}],
+                    // Quality of Life & Societal Wellbeing
+                    [['quality_of_life_societal_wellbeing', 'societal_wellbeing_quality_of_life'].sort().join(','), {name: 'Flourishing Society', description: 'Quality of life is a component of societal wellbeing, and societal wellbeing reflects in quality of life, creating a reinforcing cycle of overall flourishing.'}],
+                    // Public Discourse & Collective Wisdom
+                    [['public_discourse_collective_wisdom', 'collective_wisdom_public_discourse'].sort().join(','), {name: 'Informed Public Sphere', description: 'Collective wisdom enriches public discourse, and robust public discourse contributes to collective wisdom, creating a reinforcing cycle of informed dialogue.'}],
+                    // Conflict Resolution & Social Cohesion
+                    [['conflict_resolution_social_cohesion', 'social_cohesion_conflict_resolution'].sort().join(','), {name: 'Peaceful Coexistence', description: 'Strong social cohesion facilitates conflict resolution, and successful conflict resolution strengthens social cohesion, promoting a more peaceful society.'}],
+                    // Ethical Governance & Trust
+                    [['ethical_governance_trust_cooperation', 'trust_cooperation_ethical_governance'].sort().join(','), {name: 'Trustworthy Systems', description: 'Ethical governance builds public trust and fosters cooperation, and higher trust encourages more ethical governance, forming a reinforcing loop for integrity.'}],
+                    // Human Potential & Innovation
+                    [['human_potential_innovation_rate', 'innovation_rate_human_potential'].sort().join(','), {name: 'Human Innovation Cycle', description: 'Realizing human potential drives innovation, and innovation in turn provides new avenues for human potential development, forming a reinforcing loop.'}],
+                    // Green Habits
+                    [['sustainable_practices_environmental_stewardship', 'environmental_stewardship_sustainable_practices'].sort().join(','), {name: 'Green Habits', description: 'Sustainable practices reinforce environmental stewardship, which encourages more sustainable practices, creating a positive feedback loop for environmental responsibility.'}],
+                    // Smart Solutions
+                    [['informed_decision_making_social_innovation', 'social_innovation_informed_decision_making'].sort().join(','), {name: 'Smart Solutions', description: 'Informed decision-making sparks social innovation, and social innovation provides new data and insights for informed decision-making, forming a reinforcing loop.'}],
+                    // Eco-Tech Innovation
+                    [['technological_advancement_sustainable_practices', 'sustainable_practices_technological_advancement'].sort().join(','), {name: 'Eco-Tech Innovation', description: 'Technological advancement enables sustainable practices, and the adoption of sustainable practices can drive further technological innovation, forming a reinforcing loop.'}],
+                    // Inclusive Economy
+                    [['economic_opportunity_social_equity', 'social_equity_economic_opportunity'].sort().join(','), {name: 'Inclusive Economy', description: 'Economic opportunity reduces inequality and promotes social equity, and greater social equity can foster more widespread economic opportunity, forming a reinforcing loop.'}],
+                    // Adaptive Society
+                    [['social_innovation_societal_wellbeing', 'societal_wellbeing_social_innovation'].sort().join(','), {name: 'Adaptive Society', description: 'Social innovations address societal needs and improve wellbeing, and a higher societal wellbeing creates an environment conducive to more social innovation, forming a reinforcing loop.'}],
+                    // Global Resource Management
+                    [['global_cooperation_resource_sustainability', 'resource_sustainability_global_cooperation'].sort().join(','), {name: 'Global Resource Management', description: 'Global cooperation supports resource sustainability, and the benefits of sustainability encourage further global cooperation, reinforcing international efforts.'}],
+                    // Global Fairness
+                    [['global_cooperation_social_equity', 'social_equity_global_cooperation'].sort().join(','), {name: 'Global Fairness', description: 'Global cooperation promotes social equity, and greater social equity can lead to more effective global cooperation, reinforcing a cycle of international fairness.'}],
+                    // Global Governance Improvement
+                    [['global_cooperation_governance_quality', 'governance_quality_global_cooperation'].sort().join(','), {name: 'Global Governance Improvement', description: 'Global cooperation influences improved governance quality, and better governance can facilitate more global cooperation, reinforcing international standards.'}],
+                    // Deliberative Progress
+                    [['public_discourse_informed_decision_making', 'informed_decision_making_public_discourse'].sort().join(','), {name: 'Deliberative Progress', description: 'Robust public discourse promotes informed decision-making, and informed decisions contribute to richer public discourse, forming a reinforcing loop for societal progress.'}],
+                    // Tech-Enhanced Living
+                    [['technological_advancement_quality_of_life', 'quality_of_life_technological_advancement'].sort().join(','), {name: 'Tech-Enhanced Living', description: 'Technological advancement enhances quality of life, and a higher quality of life can drive demand for further technological innovation, creating a reinforcing loop.'}],
+                    // Healthy Environment, Healthy Lives
+                    [['environmental_stewardship_quality_of_life', 'quality_of_life_environmental_stewardship'].sort().join(','), {name: 'Healthy Environment, Healthy Lives', description: 'Environmental stewardship preserves quality of life, and a higher quality of life encourages greater environmental stewardship, forming a reinforcing loop.'}],
+                    // Prosperity & Growth
+                    [['economic_opportunity_human_potential', 'human_potential_economic_opportunity'].sort().join(','), {name: 'Prosperity & Growth', description: 'Economic opportunity frees individuals to pursue their potential, and realized human potential drives economic opportunity, forming a reinforcing loop.'}],
+                    // Inclusive Potential
+                    [['social_equity_human_potential', 'human_potential_social_equity'].sort().join(','), {name: 'Inclusive Potential', description: 'Social equity unlocks human potential for all, and realized human potential contributes to greater social equity, reinforcing a cycle of inclusive development.'}],
+                    // Active Citizenship
+                    [['civic_engagement_citizen_participation', 'citizen_participation_civic_engagement'].sort().join(','), {name: 'Active Citizenship', description: 'Civic engagement manifests as citizen participation, and citizen participation strengthens civic engagement, forming a reinforcing loop for active democracy.'}],
+                    // Responsive Governance
+                    [['citizen_participation_governance_quality', 'governance_quality_citizen_participation'].sort().join(','), {name: 'Responsive Governance', description: 'Citizen participation improves governance quality, and better governance encourages further citizen participation, reinforcing accountability.'}],
+                    // Ecological Recovery
+                    [['environmental_restoration_resource_sustainability', 'resource_sustainability_environmental_restoration'].sort().join(','), {name: 'Ecological Recovery', description: 'Environmental restoration enhances resource sustainability, and greater sustainability enables more restoration efforts, forming a reinforcing loop for ecological health.'}],
+                    // Open Dialogue Trust
+                    [['public_discourse_trust_cooperation', 'trust_cooperation_public_discourse'].sort().join(','), {name: 'Open Dialogue Trust', description: 'Open public discourse facilitates trust, and trust encourages more open discourse, forming a reinforcing loop for transparency.'}],
+                    // Connected Living
+                    [['social_cohesion_quality_of_life', 'quality_of_life_social_cohesion'].sort().join(','), {name: 'Connected Living', description: 'Strong social cohesion enriches quality of life, and a higher quality of life fosters greater social cohesion, reinforcing community bonds.'}],
+                    // Diverse Knowledge
+                    [['cultural_diversity_collective_wisdom', 'collective_wisdom_cultural_diversity'].sort().join(','), {name: 'Diverse Knowledge', description: 'Cultural diversity enriches collective wisdom, and a richer collective wisdom better appreciates and integrates cultural diversity, forming a reinforcing loop.'}],
+                    // The Utopia Attractor
+                    [['societal_wellbeing_utopia', 'utopia_societal_wellbeing'].sort().join(','), {name: 'The Utopia Attractor', description: 'As societal wellbeing increases, society moves closer to utopia, and the vision of utopia further motivates efforts to enhance societal wellbeing, creating a powerful reinforcing loop towards the ideal state.'}],
+
+                    // Balancing (B) Loops (2-edges):
+                    [['resource_depletion_resource_sustainability', 'resource_sustainability_resource_depletion'].sort().join(','), {name: 'Resource Limits', description: 'Resource depletion reduces sustainability. If sustainability drops too low, it can eventually force a reduction in depletion, creating a balancing loop that limits growth.'}],
+                    [['inequality_social_equity', 'social_equity_inequality'].sort().join(','), {name: 'Equity Restoration', description: 'Inequality decreases social equity. If social equity is too low, it can lead to demands for policies that reduce inequality, creating a balancing loop.'}],
+                    [['social_unrest_trust_cooperation', 'trust_cooperation_social_unrest'].sort().join(','), {name: 'Stability Mechanism', description: 'Social unrest erodes trust and cooperation. Low trust can lead to more unrest, but efforts to rebuild trust can reduce unrest, creating a balancing loop.'}],
+                    [['environmental_degradation_health_outcomes', 'health_outcomes_environmental_degradation'].sort().join(','), {name: 'Health Response', description: 'Environmental degradation harms health outcomes. Poor health outcomes can lead to increased awareness and action against environmental degradation, forming a balancing loop.'}],
+                    [['governance_quality_social_unrest', 'social_unrest_governance_quality'].sort().join(','), {name: 'Governance Stability', description: 'Good governance mitigates social unrest. While unrest might challenge governance, it can also lead to improvements, creating a balancing loop for stability.'}],
+                    [['conflict_resolution_social_unrest', 'social_unrest_conflict_resolution'].sort().join(','), {name: 'Peacekeeping Cycle', description: 'Effective conflict resolution reduces social unrest. While unrest demands resolution, successful resolution can prevent future unrest, forming a balancing loop.'}],
+                    [['inequality_societal_wellbeing', 'societal_wellbeing_inequality'].sort().join(','), {name: 'Equity Correction', description: 'High inequality diminishes overall societal wellbeing. Reduced wellbeing can lead to demands for policies that reduce inequality, forming a balancing loop.'}],
+                    [['resource_depletion_economic_opportunity', 'economic_opportunity_resource_depletion'].sort().join(','), {name: 'Resource Constraint', description: 'Resource depletion constrains economic opportunity. Limited opportunity can force a reduction in resource use, forming a balancing loop.'}],
+                ]);
+
+
+                let overallCount = 0; // Single counter for the continuous sequence
+
+                // Map to final format with B# or R# prefix IDs, assigned *after* the custom sort
+                return rawFoundCycles.map((cycle) => {
+                    const cycleEdgeIds = cycle.edges.map(edgeId => {
+                        const edge = edgeMap.get(edgeId);
+                        return `${edge.from}_${edge.to}`;
+                    });
+                    const cycleEdgeIdsString = [...cycleEdgeIds].sort().join(','); // Standardize for map lookup
+
+                    // Try to find a named interpretation for this cycle
+                    let interpretation = loopInterpretations.get(cycleEdgeIdsString);
+
+                    overallCount++; // Increment for every loop in the sorted list, including unnamed ones
+                    const loopId = `${cycle.type}${overallCount}`; // Use type + overallCount for the ID
+
+                    if (!interpretation) {
+                        // If no specific interpretation, use a generic description
+                        // Fallback for uninterpreted loops: list nodes involved in the loop path
+                        const descriptiveNamePart = `Path: ${cycle.nodes.map(n => nodeLabelMap.get(n) || n).join(' → ')}`;
+                        const thematicDesc = "This is an algorithmically detected feedback loop. Examine its constituent variables and links to understand its dynamics. Consider if it's a reinforcing (R) or balancing (B) loop based on the count of negative links.";
+
+                        return {
+                            id: loopId,
+                            type: cycle.type,
+                            name: wrapText(`${loopId}: ${descriptiveNamePart}`, 50),
+                            description: thematicDesc,
+                            edgeIds: cycle.edges,
+                            nodeIds: cycle.nodes,
+                            edgeCount: cycle.edgeCount
+                        };
+
+                    } else {
+                        // If interpretation exists, use its name and description
+                        return {
+                            id: loopId,
+                            type: cycle.type,
+                            name: wrapText(`${loopId}: ${interpretation.name}`, 50), // Prepend dynamic ID to original name
+                            description: interpretation.description,
+                            edgeIds: cycle.edges,
+                            nodeIds: cycle.nodes,
+                            edgeCount: cycle.edgeCount
+                        };
+                    }
+                });
+            }
+
+
+            const feedbackLoops = findAllCyclesRobust(nodesArray, edgesData);
+            const container = document.getElementById('cldNetwork');
+            const data = { nodes: nodes, edges: edges };
+            const options = {
+                autoResize: true, height: '100%', width: '100%',
+                nodes: {
+                    shape: 'ellipse',
+                    size: 30,
+                    font: { size: 14, face: 'Inter', color: '#1F2937', multi: true, bold: { color: '#111827', size: 14, face: 'Inter', vadjust: 0, mod: 'bold' } },
+                    widthConstraint: { maximum: 180 },
+                    borderWidth: 2.5,
+                    color: { background: nodeBaseColor.background, border: nodeBaseColor.border, highlight: { background: nodeHighlightColor.background, border: nodeHighlightColor.border }, hover: { background: '#BFDBFE', border: '#60A5FA' }},
+                    shadow: { enabled: true, size:5, x:2, y:2, color: 'rgba(0,0,0,0.1)'}
+                },
+                edges: {
+                    width: 2.5, // This will be overridden by individual edge widths in edgesData
+                    arrows: { to: { enabled: true, scaleFactor: 0.8, type: 'arrow' } },
+                    smooth: { enabled: true, type: "cubicBezier", roundness: 0.3 },
+                    chosen: { edge: function(values, id, selected, hovering) { if (selected || hovering) { values.color = 'magenta'; values.width = values.width * 1.8; }}},
+                    font: { multi: true, background: 'rgba(255,255,255,0)' } // Ensure transparent background for edge labels
+                },
+                physics: {
+                    enabled: true, solver: 'barnesHut',
+                    barnesHut: { gravitationalConstant: -45000, centralGravity: 0.2, springLength: 350, springConstant: 0.05, damping: 0.1, avoidOverlap: 0.8 },
+                    stabilization: { enabled: true, iterations: 2500, updateInterval: 25, onlyDynamicEdges: false, fit: true }
+                },
+                interaction: {
+                    hover: true, dragNodes: true, dragView: true, zoomView: true, tooltipDelay: 0, // Set tooltipDelay to 0 for custom tooltips
+                    navigationButtons: false, keyboard: { enabled: true, bindToWindow: true },
+                    selectable: true, selectConnectedEdges: false, hoverConnectedEdges: false
+                },
+                layout: { hierarchical: false }
+            };
+
+            const originalNodeStyles = {};
+            nodesArray.forEach(node => {
+                // Start with a deep clone of the global options.nodes.color to get the full structure (background, border, highlight, hover)
+                const baseColor = JSON.parse(JSON.stringify(options.nodes.color));
+
+                // Override specific properties with node's defined colors if they exist.
+                // This ensures highlight and hover sub-objects are retained from baseColor if not explicitly overridden by node.color.
+                if (node.color) {
+                    if (node.color.background !== undefined) baseColor.background = node.color.background;
+                    if (node.color.border !== undefined) baseColor.border = node.color.border;
+                    // If node.color has highlight/hover, merge them specifically
+                    if (node.color.highlight) {
+                        if (node.color.highlight.background !== undefined) baseColor.highlight.background = node.color.highlight.background;
+                        if (node.color.highlight.border !== undefined) baseColor.highlight.border = node.color.highlight.border;
+                    }
+                    if (node.color.hover) {
+                        if (node.color.hover.background !== undefined) baseColor.hover.background = node.color.hover.background;
+                        if (node.color.hover.border !== undefined) baseColor.hover.border = node.color.hover.border;
+                    }
+                    // For stock nodes, their 'color' is stockColor, which just has background/border.
+                    // This will correctly override baseColor's background/border, while highlight/hover will remain from baseColor (options.nodes.color).
+                }
+
+                originalNodeStyles[node.id] = {
+                    color: baseColor, // Now `baseColor` has the complete structure
+                    font: JSON.parse(JSON.stringify(node.font || options.nodes.font)),
+                    shape: node.shape,
+                    chosen: node.chosen
+                };
+            });
+
+            const originalEdgeStyles = {};
+            edgesData.forEach(edge => {
+                let smoothOpt = JSON.parse(JSON.stringify(options.edges.smooth));
+                if (edge.smooth) {
+                    smoothOpt = { ...smoothOpt, ...edge.smooth };
+                }
+                originalEdgeStyles[edge.id] = {
+                    width: edge.width !== undefined ? edge.width : options.edges.width, // Store the assigned width
+                    color: JSON.parse(JSON.stringify(edge.color)),
+                    font: JSON.parse(JSON.stringify(edge.font || options.edges.font)),
+                    dashes: edge.dashes !== undefined ? edge.dashes : false,
+                    smooth: smoothOpt
+                };
+            });
+
+            const network = new vis.Network(container, data, options);
+            const networkCanvas = container.querySelector('canvas');
+
+            const loopListUL = document.getElementById('loopList');
+            const legendDiv = document.getElementById('legend');
+            const legendHeader = legendDiv.querySelector('h3');
+            const loopDescriptionDiv = document.getElementById('loopDescription');
+            const modelTitleDisplay = document.getElementById('modelTitleDisplay');
+            const nodeTooltipDiv = document.getElementById('nodeTooltip'); // Get the custom node tooltip div
+            const edgeTooltipDiv = document.getElementById('edgeTooltip'); // Get the custom edge tooltip div
+            let selectedLoopId = null;
+
+            let activeEdgeForRecurve = null;
+            let isRecurvingEdge = false;
+
+            function updateDescriptionPosition() {
+                if (loopDescriptionDiv.style.display !== 'block') return;
+                const legendCurrentHeight = legendDiv.offsetHeight;
+                loopDescriptionDiv.style.top = (legendDiv.offsetTop + legendCurrentHeight + 10) + 'px';
+            }
+
+            function toggleLegend() {
+                legendDiv.classList.toggle('expanded');
+                // The loop description should only show if a loop is selected AND the legend is expanded.
+                // If legend is collapsing, hide the description.
+                if (legendDiv.classList.contains('expanded')) {
+                    if (selectedLoopId) {
+                        const loop = feedbackLoops.find(l => l.id === selectedLoopId);
+                        if (loop) {
+                            loopDescriptionDiv.innerHTML = `<strong>${loop.name.replace(/\n/g, ' ')}</strong><p>${loop.description}</p>`;
+                            loopDescriptionDiv.style.display = 'block';
+                        }
+                    } else {
+                        loopDescriptionDiv.style.display = 'none';
+                    }
+                } else {
+                    loopDescriptionDiv.style.display = 'none';
+                }
+                updateDescriptionPosition();
+            }
+
+            function clearAllHighlightsAndDescriptions() {
+                const nodesToRestore = []; const edgesToRestore = [];
+                nodes.getIds().forEach(nodeId => {
+                    const originalNodeStyle = originalNodeStyles[nodeId];
+                    if (originalNodeStyle) {
+                        nodesToRestore.push({
+                            id: nodeId,
+                            opacity: 1.0,
+                            color: originalNodeStyle.color,
+                            font: originalNodeStyle.font,
+                            borderWidth: options.nodes.borderWidth || 2,
+                            shape: originalNodeStyle.shape,
+                            chosen: originalNodeStyle.chosen
+                        });
+                    }
+                });
+                edges.getIds().forEach(edgeId => {
+                     const originalEdgeStyle = originalEdgeStyles[edgeId];
+                     if (originalEdgeStyle) {
+                         edgesToRestore.push({
+                             id: edgeId,
+                             width: originalEdgeStyle.width, // Use original width
+                             dashes: originalEdgeStyle.dashes,
+                             color: originalEdgeStyle.color,
+                             font: originalEdgeStyle.font,
+                             smooth: JSON.parse(JSON.stringify(originalEdgeStyle.smooth)),
+                             chosen: { edge: function(values, id, selected, hovering) { if (selected || hovering) { values.color = 'magenta'; values.width = originalEdgeStyle.width * 1.2; }}} // Adjust chosen
+                            });
+                        }
+                });
+                if (nodesToRestore.length > 0) nodes.update(nodesToRestore);
+                if (edgesToRestore.length > 0) edges.update(edgesToRestore);
+
+                loopDescriptionDiv.style.display = 'none';
+                loopDescriptionDiv.innerHTML = '';
+            }
+
+            function highlightSelectedLoop(loopToHighlight) {
+                clearAllHighlightsAndDescriptions();
+                const loopNodeIds = new Set(loopToHighlight.nodeIds);
+                const loopEdgeIds = new Set(loopToHighlight.edgeIds);
+                const nodesToUpdate = []; const edgesToUpdate = [];
+
+                nodes.getIds().forEach(nodeId => {
+                    const originalNodeStyle = originalNodeStyles[nodeId]; if (!originalNodeStyle) return;
+                    if (loopNodeIds.has(nodeId)) {
+                        nodesToUpdate.push({
+                            id: nodeId,
+                            opacity: 1.0,
+                            color: originalNodeStyle.color,
+                            font: originalNodeStyle.font,
+                            borderWidth: (options.nodes.borderWidth || 2) * 1.5,
+                            shape: originalNodeStyle.shape,
+                            chosen: originalNodeStyle.chosen
+                        });
+                    } else {
+                        nodesToUpdate.push({
+                            id: nodeId,
+                            opacity: 0.15,
+                            color: {
+                                background: colorToRgba(originalNodeStyle.color.background, 0.15),
+                                border: colorToRgba((originalNodeStyle.color.border) || '', 0.15), // Ensure color values are passed correctly
+                                highlight: {
+                                    background: colorToRgba((originalNodeStyle.color.highlight && originalNodeStyle.color.highlight.background) || '', 0.15),
+                                    border: colorToRgba((originalNodeStyle.color.highlight && originalNodeStyle.color.highlight.border) || '', 0.15)
+                                }
+                            },
+                            font: { ...originalNodeStyle.font, color: colorToRgba(originalNodeStyle.font.color, 0.15) },
+                            borderWidth: options.nodes.borderWidth || 2,
+                            shape: originalNodeStyle.shape,
+                            chosen: originalNodeStyle.chosen
+                        });
+                    }
+                });
+                edges.getIds().forEach(edgeId => {
+                    const originalEdgeStyle = originalEdgeStyles[edgeId]; if (!originalEdgeStyle) return;
+                    if (loopEdgeIds.has(edgeId)) {
+                        const highlightedEdgeFont = JSON.parse(JSON.stringify(originalEdgeStyle.font));
+                        if (highlightedEdgeFont.color) { highlightedEdgeFont.color = colorToRgba(originalEdgeStyle.font.color, 1.0); }
+                        // Set background to transparent when highlighting
+                        highlightedEdgeFont.background = 'rgba(255,255,255,0)';
+                        edgesToUpdate.push({ id: edgeId, width: (originalEdgeStyle.width || options.edges.width) * 2.2, dashes: false, color: { color: '#FF4500', highlight: '#FF6347', hover: '#FF7F50' }, font: highlightedEdgeFont, smooth: JSON.parse(JSON.stringify(originalEdgeStyle.smooth)), chosen: { edge: function(values, id, selected, hovering) { values.color = '#FF0000'; values.width = originalEdgeStyle.width * 1.2; }}}); // Adjust chosen
+                    } else {
+                        const dimmedEdgeColorObject = {};
+                        if (originalEdgeStyle.color && typeof originalEdgeStyle.color === 'object') {
+                            dimmedEdgeColorObject.color = colorToRgba(originalEdgeStyle.color.color, 0.1); dimmedEdgeColorObject.highlight = colorToRgba(originalEdgeStyle.color.highlight, 0.1); dimmedEdgeColorObject.hover = colorToRgba(originalEdgeStyle.color.hover, 0.1);
+                        } else {
+                             dimmedEdgeColorObject.color = colorToRgba(originalEdgeStyle.color || 'gray', 0.1); dimmedEdgeColorObject.highlight = colorToRgba(originalEdgeStyle.color || 'gray', 0.1); dimmedEdgeColorObject.hover = colorToRgba(originalEdgeStyle.color || 'gray', 0.1);
+                        }
+                        const dimmedFontObject = JSON.parse(JSON.stringify(originalEdgeStyle.font || {}));
+                        if (dimmedFontObject.color) { dimmedFontObject.color = colorToRgba(dimmedFontObject.color, 0.1); }
+                        if (dimmedFontObject.background) { dimmedFontObject.background = colorToRgba(dimmedFontObject.background, 0.0); } // Ensure transparent background when dimmed
+                        edgesToUpdate.push({ id: edgeId, color: dimmedEdgeColorObject, width: (originalEdgeStyle.width || options.edges.width) * 0.8, dashes: originalEdgeStyle.dashes, font: dimmedFontObject, smooth: JSON.parse(JSON.stringify(originalEdgeStyle.smooth)) });
+                    }
+                });
+
+                if (nodesToUpdate.length > 0) nodes.update(nodesToUpdate);
+                if (edgesToUpdate.length > 0) edges.update(edgesToUpdate);
+
+                loopDescriptionDiv.innerHTML = `<strong>${loopToHighlight.name.replace(/\n/g, ' ')}</strong><p>${loopToHighlight.description}</p>`;
+                loopDescriptionDiv.style.display = 'block';
+                updateDescriptionPosition();
+            }
+
+            if (feedbackLoops.length === 0) {
+                loopListUL.innerHTML = "<li>No feedback loops were automatically identified.</li>";
+            } else {
+                feedbackLoops.forEach(loop => {
+                    const listItem = document.createElement('li');
+                    listItem.classList.add('legend-item');
+                    listItem.innerHTML = `<span class="loop-id">${loop.id}:</span> ${loop.name.substring(loop.name.indexOf(':') + 1).trim().replace(/\n/g, ' ')}`;
+                    listItem.dataset.loopId = loop.id;
+                    listItem.addEventListener('click', () => {
+                        const clickedLoopId = loop.id;
+                        const currentlySelectedLegendItem = legendDiv.querySelector('.legend-item.selected-loop-item');
+                        if (currentlySelectedLegendItem) { currentlySelectedLegendItem.classList.remove('selected-loop-item'); }
+                        if (selectedLoopId === clickedLoopId) {
+                            selectedLoopId = null;
+                            clearAllHighlightsAndDescriptions();
+                        } else {
+                            selectedLoopId = clickedLoopId;
+                            highlightSelectedLoop(loop);
+                            listItem.classList.add('selected-loop-item');
+                            if (!legendDiv.classList.contains('expanded')) {
+                                legendDiv.classList.add('expanded');
+                                updateDescriptionPosition();
+                            }
+                        }
+                        if (activeEdgeForRecurve) {
+                            activeEdgeForRecurve = null;
+                        }
+                    });
+                    loopListUL.appendChild(listItem);
+                });
+            }
+
+            if(legendHeader) {
+                legendHeader.addEventListener('click', toggleLegend);
+            }
+
+            // --- Node Tooltip Logic ---
+            network.on("hoverNode", function(params) {
+                const nodeId = params.node;
+                if (nodeId) {
+                    const node = nodes.get(nodeId);
+                    if (node && node.description) {
+                        const nodePosition = network.getPositions([nodeId]);
+                        const domPosition = network.canvas.canvasToDOM({x: nodePosition[nodeId].x, y: nodePosition[nodeId].y});
+
+                        nodeTooltipDiv.innerHTML = wrapText(node.description + "<br><br><b>Measurement:</b> " + node.measurement);
+                        nodeTooltipDiv.style.left = (domPosition.x + 15) + 'px'; // Offset from node
+                        nodeTooltipDiv.style.top = (domPosition.y + 15) + 'px';  // Offset from node
+                        nodeTooltipDiv.style.display = 'block';
+
+                        // Adjust position if it goes off screen (simple check for right and bottom)
+                        const rect = nodeTooltipDiv.getBoundingClientRect();
+                        const viewportWidth = window.innerWidth;
+                        const viewportHeight = window.innerHeight;
+
+                        if (rect.right > viewportWidth - 10) {
+                            nodeTooltipDiv.style.left = (domPosition.x - rect.width - 15) + 'px';
+                        }
+                        if (rect.bottom > viewportHeight - 10) {
+                            nodeTooltipDiv.style.top = (domPosition.y - rect.height - 15) + 'px';
+                        }
+                    }
+                }
+            });
+
+            network.on("blurNode", function() {
+                nodeTooltipDiv.style.display = 'none';
+            });
+
+            // --- Edge Tooltip Logic ---
+            network.on("hoverEdge", function(params) {
+                const edgeId = params.edge;
+                if (edgeId) {
+                    const edge = edges.get(edgeId);
+                    if (edge && edge.description) {
+                        // Position tooltip relative to the mouse pointer
+                        const domX = params.pointer.DOM.x;
+                        const domY = params.pointer.DOM.y;
+
+                        edgeTooltipDiv.innerHTML = wrapText(edge.description + "<br><br><b>Measurement:</b> " + edge.description.split('Estimated interaction time: ')[0].trim() + " (e.g., survey on perceived influence, correlation analysis between connected variables)");
+                        edgeTooltipDiv.style.left = (domX + 15) + 'px';
+                        edgeTooltipDiv.style.top = (domY + 15) + 'px';
+                        edgeTooltipDiv.style.display = 'block';
+
+                        // Adjust position if it goes off screen
+                        const rect = edgeTooltipDiv.getBoundingClientRect();
+                        const viewportWidth = window.innerWidth;
+                        const viewportHeight = window.innerHeight;
+
+                        if (rect.right > viewportWidth - 10) {
+                            edgeTooltipDiv.style.left = (domX - rect.width - 15) + 'px';
+                        }
+                        if (rect.bottom > viewportHeight - 10) {
+                            edgeTooltipDiv.style.top = (domY - rect.height - 15) + 'px';
+                        }
+                    }
+                }
+            });
+
+            network.on("blurEdge", function() {
+                edgeTooltipDiv.style.display = 'none';
+            });
+
+            // Hide all tooltips on drag end
+            network.on("dragEnd", function() {
+                nodeTooltipDiv.style.display = 'none';
+                edgeTooltipDiv.style.display = 'none';
+            });
+
+
+            // --- Edge Recurving Logic ---
+            function getEdgeSmoothOptions(edgeId) {
+                const edge = edges.get(edgeId);
+                if (edge && edge.smooth) {
+                    return JSON.parse(JSON.stringify(edge.smooth));
+                }
+                if (originalEdgeStyles[edgeId] && originalEdgeStyles[edgeId].smooth) {
+                    return JSON.parse(JSON.stringify(originalEdgeStyles[edgeId].smooth));
+                }
+                return { type: 'cubicBezier', roundness: 0.3, enabled: true };
+            }
+
+            function updateOriginalEdgeSmoothOptions(edgeId, newSmoothOptions) {
+                if (!originalEdgeStyles[edgeId]) {
+                    originalEdgeStyles[edgeId] = {};
+                }
+                originalEdgeStyles[edgeId].smooth = JSON.parse(JSON.stringify(newSmoothOptions));
+            }
+
+            network.on("click", function(params) {
+                if (isRecurvingEdge) {
+                    return;
+                }
+
+                if (params.edges.length > 0 && params.nodes.length === 0) {
+                    const clickedEdgeId = params.edges[0];
+                    if (activeEdgeForRecurve === clickedEdgeId) {
+                        activeEdgeForRecurve = null;
+                    } else {
+                        activeEdgeForRecurve = clickedEdgeId;
+                    }
+                    if (selectedLoopId) {
+                        const currentlySelectedLegendItem = legendDiv.querySelector('.legend-item.selected-loop-item');
+                        if (currentlySelectedLegendItem) { currentlySelectedLegendItem.classList.remove('selected-loop-item'); }
+                        clearAllHighlightsAndDescriptions();
+                        selectedLoopId = null;
+                    }
+                } else {
+                     if (activeEdgeForRecurve) {
+                        activeEdgeForRecurve = null;
+                    }
+                }
+            });
+
+            if (networkCanvas) {
+                networkCanvas.addEventListener('mousedown', function(event) {
+                    if (activeEdgeForRecurve && !isRecurvingEdge) {
+                        isRecurvingEdge = true;
+                        document.addEventListener('mousemove', handleMouseMoveOnDocumentForRecurve);
+                        document.addEventListener('mouseup', handleMouseUpOnDocumentForRecurve);
+                        network.setOptions({ interaction: { dragNodes: false, dragView: false } });
+                        event.preventDefault();
+                    }
+                });
+            } else {
+                console.error("Network canvas element not found. Edge recurving will not work.");
+            }
+
+            function handleMouseMoveOnDocumentForRecurve(event) {
+                if (!isRecurvingEdge || !activeEdgeForRecurve) return;
+
+                const currentMousePos = network.canvas.DOMtoCanvas({x: event.clientX, y: event.clientY});
+                const edge = edges.get(activeEdgeForRecurve);
+                if (!edge) {
+                    isRecurvingEdge = false;
+                    document.removeEventListener('mousemove', handleMouseMoveOnDocumentForRecurve);
+                    document.removeEventListener('mouseup', handleMouseUpOnDocumentForRecurve);
+                    network.setOptions({ interaction: { dragNodes: true, dragView: true } });
+                    activeEdgeForRecurve = null;
+                    return;
+                }
+
+                const fromNodePos = network.getPositions([edge.from])[edge.from];
+                const toNodePos = network.getPositions([edge.to])[edge.to];
+                if (!fromNodePos || !toNodePos) {
+                    return;
+                }
+
+                const midPointX = (fromNodePos.x + toNodePos.x) / 2;
+                const midPointY = (fromNodePos.y + toNodePos.y) / 2;
+                const dx = currentMousePos.x - midPointX;
+                const dy = currentMousePos.y - midPointY;
+                const edgeDx = toNodePos.x - fromNodePos.x;
+                const edgeDy = toNodePos.y - fromNodePos.y;
+                const orientation = (edgeDx * dy) - (edgeDy * dx);
+                const newCurveType = orientation > 0 ? 'curvedCCW' : 'curvedCW';
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                const edgeLength = Math.sqrt(edgeDx*edgeDx + edgeDy*edgeDy);
+                let newRoundness = (dist / edgeLength) * 1.0;
+                newRoundness = Math.max(0.01, Math.min(0.95, newRoundness));
+
+                edges.update({
+                    id: activeEdgeForRecurve,
+                    smooth: { type: newCurveType, roundness: newRoundness, enabled: true }
+                });
+            }
+
+            function handleMouseUpOnDocumentForRecurve(event) {
+                if (isRecurvingEdge) {
+                    if (activeEdgeForRecurve) {
+                        const finalEdgeState = edges.get(activeEdgeForRecurve);
+                        if (finalEdgeState && finalEdgeState.smooth) {
+                            updateOriginalEdgeSmoothOptions(activeEdgeForRecurve, finalEdgeState.smooth);
+                        }
+                        activeEdgeForRecurve = null;
+                    }
+                }
+                isRecurvingEdge = false;
+                document.removeEventListener('mousemove', handleMouseMoveOnDocumentForRecurve);
+                document.removeEventListener('mouseup', handleMouseUpOnDocumentForRecurve);
+                network.setOptions({ interaction: { dragNodes: true, dragView: true } });
+            }
+
+            network.on("stabilizationIterationsDone", function () { network.setOptions( { physics: { enabled: false } } ); });
+            network.on("dragStart", function(params) {
+                if (params.nodes.length > 0 && !isRecurvingEdge) {
+                    const nodeId = params.nodes[0];
+                    nodes.update([{id: nodeId, fixed: {x:false, y:false}}]);
+                }
+            });
+            network.on("dragEnd", function(params) {
+                if (params.nodes.length > 0 && !isRecurvingEdge) {
+                    const nodeId = params.nodes[0];
+                    const pos = network.getPosition(nodeId);
+                    nodes.update([{id: nodeId, x: pos.x, y: pos.y, fixed: {x:true, y:true}}]);
+                }
+            });
+
+            window.addEventListener('resize', () => {
+                if (loopDescriptionDiv.style.display === 'block') {
+                    updateDescriptionPosition();
+                }
+                network.fit();
+            });
+
+            loopDescriptionDiv.style.display = 'none';
+
+            // Set the model title display
+            if (modelTitleDisplay) {
+                modelTitleDisplay.textContent = document.title;
+            }
+        });
+    </script>
+</body>
+</html>
