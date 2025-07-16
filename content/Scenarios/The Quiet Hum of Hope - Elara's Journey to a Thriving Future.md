@@ -1,6 +1,8 @@
 ---
 title: The Quiet Hum of Hope
 date: 2025-07-14
+source: 
+note:
 ---
 
 The **story**:  
