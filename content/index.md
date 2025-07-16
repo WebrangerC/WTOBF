@@ -3,13 +3,13 @@ title: You have discovered a Way to Our Better Future
 date: 2025-07-14
 source: https://app.thebrain.com/brain/7dc3a278-9062-443e-8af4-b230d820d3a9/66dd131c-0c44-4829-8ee2-d43cd1cf1650
 ---
+
 # <font color="#f79646">Our goal is to offer analysis of our societal environment to foster a discussion about our current conditions and our possible futures. </font> 
 
-# <font color="#245bdb"><==  More scenarios</font>
+# <==  <font color="#245bdb">More scenarios</font>
+
 ## Discussions take place here:  **COMING SOON**
 
-
----
 
 ## Analysis
 
