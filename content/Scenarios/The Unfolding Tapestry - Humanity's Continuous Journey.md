@@ -29,6 +29,6 @@ The journey was endless, a continuous striving. But now, the despair was gone, r
 Here is the **[[Causal Loop Diagram]]**:
 ![[tut-hcj.jpg]]
 
-The interactive model: [[humanitys-continuous-journey.html]]  
+The interactive model: [[humanitys-continuous-journey.html|Humanity's Continuous Journey]]
 
 The **discussion analysis** is here:  [[TUT-HCJ.mp3]]

@@ -1,5 +1,6 @@
 ---
 title: 
 date: "{{date}}"
-source:
+source: 
+note:
 ---

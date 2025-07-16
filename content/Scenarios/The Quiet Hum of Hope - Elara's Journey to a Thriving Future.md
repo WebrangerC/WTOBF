@@ -27,7 +27,7 @@ The restless anxiety in the air had faded, replaced by a different kind of hum â
 Here is the **[[Causal Loop Diagram]]**:
 ![[TQHOH-2.png]]
 
-The interactive model: [[quiet-hum-of-hope.html]]  
+The [[Interactive Model]]: [[quiet-hum-of-hope.html|The Quiet Hum of Hope]]  
 
 The **discussion analysis** is here:  [[TQHOH.mp3]]
 
