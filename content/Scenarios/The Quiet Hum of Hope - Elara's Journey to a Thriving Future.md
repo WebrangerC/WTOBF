@@ -8,7 +8,7 @@ note:
 The **story**:  
 The air used to hum with a restless anxiety, a low, persistent thrum beneath the surface of everyday life. Elara felt it most acutely in the hushed conversations at the market, in the way people averted their eyes from the news screens, in the quiet desperation that clung to the edges of their smiles. The 'Societal Path' was a well-worn groove, deepening with every passing year, leading irrevocably towards what felt like a pre-ordained collapse.
 
-![[TQHOH-1.jpg]]
+![[tohoh-1.jpg]]
 
 Her grandmother, a woman whose eyes held the wisdom of a hundred seasons, used to call it the 'Great Unknowing.' "We see the symptoms, child," she'd say, her voice raspy with age, "but we refuse to see the connections. We are blind to the loops that bind us."
 
