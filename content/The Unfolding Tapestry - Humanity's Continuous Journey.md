@@ -27,8 +27,8 @@ The city of Utopia never materialized as a fixed point. Instead, it began to unf
 The journey was endless, a continuous striving. But now, the despair was gone, replaced by a quiet, unwavering hope. The Great Hall of Echoes no longer resonated with lamentations, but with the vibrant hum of a society consciously weaving its own future, thread by interconnected thread, guided by the understanding that Utopia was not a destination, but the ever-"Approaching" state of their collective "Societal Wellbeing."
 
 Here is the **[[Causal Loop Diagram]]**:
-![[tut-hcj.jpg]]
+![[public/images/tut-hcj.jpg]]
 
 The interactive model: [[humanitys-continuous-journey.html|Humanity's Continuous Journey]]
 
-The **discussion analysis** is here:  [[TUT-HCJ.mp3]]
+The **discussion analysis** is here:  [[public/audio/TUT-HCJ.mp3]]
